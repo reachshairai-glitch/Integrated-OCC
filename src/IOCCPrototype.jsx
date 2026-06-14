@@ -1450,6 +1450,379 @@ function AIAssistant() {
   );
 }
 
+// ── PASSENGER RECOVERY DATA ─────────────────────────────────────
+const PR_AUTO = [
+  { name: "Mehta, Rajesh", pnr: "QK7P2R", flight: "FL-312", dep: "14:20", seat: "12A", notif: "Notified" },
+  { name: "Reddy, Sai", pnr: "QM4T9L", flight: "FL-312", dep: "14:20", seat: "12B", notif: "Notified" },
+  { name: "Singh, Harpreet", pnr: "QB1X8C", flight: "FL-312", dep: "14:20", seat: "9C", notif: "Notified" },
+  { name: "Banerjee, Arjun", pnr: "QL5R3D", flight: "FL-508", dep: "16:45", seat: "21D", notif: "Notified" },
+  { name: "Desai, Karan", pnr: "QN2Y6V", flight: "FL-508", dep: "16:45", seat: "18A", notif: "Notified" },
+  { name: "Iyer, Ananya", pnr: "QF8W1G", flight: "FL-336", dep: "17:30", seat: "4F", notif: "Pending" },
+];
+const PR_PRIORITY = [
+  { name: "Verma, Sunita", tag: "Platinum Frequent Flyer", level: "warn" },
+  { name: "Chen, Wei", tag: "Unaccompanied Minor", level: "critical" },
+  { name: "Fernandes, Rio", tag: "Wheelchair Assistance", level: "warn" },
+  { name: "Ahmed, Zara", tag: "Medical — Oxygen", level: "critical" },
+  { name: "Kapoor, Dev", tag: "Diamond Frequent Flyer", level: "warn" },
+];
+const PR_COMP = [
+  { name: "Nair, Lakshmi", amount: "₹10,000", status: "Pending" },
+  { name: "Gupta, Priya", amount: "₹10,000", status: "Pending" },
+  { name: "Khan, Imran", amount: "₹7,500", status: "Issued" },
+  { name: "Rao, Meera", amount: "₹7,500", status: "Pending" },
+  { name: "Bose, Anirban", amount: "₹5,000", status: "Issued" },
+];
+const PR_DECISIONS = [
+  { name: "Mehta, Rajesh", flight: "FL-312", dep: "14:20", conf: 97, reason: "Direct swap · window seat retained", notif: true },
+  { name: "Gupta, Priya", flight: "FL-508", dep: "16:45", conf: 89, reason: "Connection risk flagged · 45m buffer", notif: true, risk: true },
+  { name: "Reddy, Sai", flight: "FL-312", dep: "14:20", conf: 96, reason: "Group of 4 kept together", notif: true },
+  { name: "Khan, Imran", flight: "FL-336", dep: "17:30", conf: 92, reason: "Loyalty tier prioritised", notif: false },
+  { name: "Singh, Harpreet", flight: "FL-312", dep: "14:20", conf: 98, reason: "Direct swap · no change", notif: true },
+  { name: "Banerjee, Arjun", flight: "FL-508", dep: "16:45", conf: 90, reason: "Seat downgrade · refund queued", notif: true },
+  { name: "Nair, Lakshmi", flight: "FL-622", dep: "19:05", conf: 84, reason: "Last-resort · overnight avoided", notif: false, risk: true },
+  { name: "Desai, Karan", flight: "FL-508", dep: "16:45", conf: 91, reason: "Aisle preference met", notif: true },
+  { name: "Iyer, Ananya", flight: "FL-336", dep: "17:30", conf: 95, reason: "Next available · aisle pref", notif: true },
+  { name: "Rao, Meera", flight: "FL-312", dep: "14:20", conf: 88, reason: "Fare-class match found", notif: true },
+];
+const PR_CHANNELS = [
+  { ch: "App Push", pct: 58, color: C.blue },
+  { ch: "SMS", pct: 24, color: C.green },
+  { ch: "Email", pct: 12, color: C.amber },
+  { ch: "Airport Display", pct: 6, color: C.cyan },
+];
+const PR_STAGES = [
+  { label: "Disruption Detected", channel: "system event", target: 100, rate: 40 },
+  { label: "Passengers Notified", channel: "app · SMS · email", target: 100, rate: 9 },
+  { label: "Rebooking Confirmed", channel: "app push", target: 94, rate: 6 },
+  { label: "Boarding Pass Reissued", channel: "app · airport kiosk", target: 78, rate: 4 },
+];
+const PR_DGCA = [
+  { item: "Passengers notified within 24h of departure", status: "done" },
+  { item: "Rebooking on next available flight offered", status: "done" },
+  { item: "Refund option offered to all 186 passengers", status: "done" },
+  { item: "Meal voucher eligibility (>2h delay)", status: "na", note: "not triggered — 34 min delay" },
+  { item: "Compensation calculated & queued (DGCA CAR)", status: "progress" },
+  { item: "Special assistance arranged (reduced mobility)", status: "done" },
+  { item: "Boarding passes reissued to all rebooked pax", status: "progress" },
+];
+const PR_SEARCH = [
+  { name: "Mehta, Rajesh", pnr: "QK7P2R", status: "Auto-rebooked → FL-312 · 14:20", level: "good" },
+  { name: "Gupta, Priya", pnr: "QC3Z7W", status: "Pending rebooking · connection risk", level: "bad" },
+  { name: "Nair, Lakshmi", pnr: "QP9Q4H", status: "Pending rebooking · no seats", level: "bad" },
+  { name: "Verma, Sunita", pnr: "QV1A1T", status: "High priority · Platinum FF", level: "warn" },
+  { name: "Khan, Imran", pnr: "QD6V2N", status: "Auto-rebooked → FL-336 · 17:30", level: "good" },
+  { name: "Chen, Wei", pnr: "QW3UMX", status: "High priority · Unaccompanied Minor", level: "warn" },
+];
+const PR_ALT = ["FL-312 · 14:20", "FL-508 · 16:45", "FL-336 · 17:30", "FL-622 · 19:05"];
+
+// ── SCREEN: PASSENGER RECOVERY ──────────────────────────────────
+function PassengerRecovery() {
+  const [autoPct, setAutoPct] = useState(91);
+  const [pending, setPending] = useState([
+    { name: "Nair, Lakshmi", pnr: "QP9Q4H", reason: "No seats on same-day alternates" },
+    { name: "Gupta, Priya", pnr: "QC3Z7W", reason: "Tight onward connection at BOM" },
+    { name: "Khan, Imran", pnr: "QD6V2N", reason: "Group of 5 — no contiguous availability" },
+    { name: "Rao, Meera", pnr: "QH1J5K", reason: "Special fare class re-accommodation" },
+    { name: "Bose, Anirban", pnr: "QT7K9P", reason: "Codeshare partner confirmation pending" },
+    { name: "Pillai, Devan", pnr: "QR4M8B", reason: "Medical equipment stowage on alternate" },
+  ]);
+  const [decisions, setDecisions] = useState(() => PR_DECISIONS.slice(0, 4).map((d, i) => ({ ...d, id: i })));
+  const [stageVals, setStageVals] = useState([0, 0, 0, 0]);
+  const [open, setOpen] = useState({ auto: false, pending: true, priority: false, comp: false });
+  const [q, setQ] = useState("");
+  const [assigned, setAssigned] = useState(null);
+  const decIdx = useRef(4);
+
+  useEffect(() => {
+    if (document.getElementById("iocc-pr-style")) return;
+    const s = document.createElement("style");
+    s.id = "iocc-pr-style";
+    s.textContent = `@keyframes ioccPrIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } } .iocc-pr-in { animation: ioccPrIn 0.5s ease-out; }`;
+    document.head.appendChild(s);
+  }, []);
+
+  // headline auto-rebooked % climbs 91 → 94
+  useEffect(() => {
+    const t = setInterval(() => setAutoPct(p => (p >= 94 ? 94 : +(p + 0.1).toFixed(1))), 1000);
+    return () => clearInterval(t);
+  }, []);
+  // rebooking decision feed scrolls (new decision every 3.5s)
+  useEffect(() => {
+    const t = setInterval(() => {
+      const d = PR_DECISIONS[decIdx.current % PR_DECISIONS.length];
+      const id = decIdx.current++;
+      setDecisions(prev => [{ ...d, id }, ...prev].slice(0, 9));
+    }, 3500);
+    return () => clearInterval(t);
+  }, []);
+  // notification tracker stages advance
+  useEffect(() => {
+    const t = setInterval(() => setStageVals(v => v.map((x, i) => Math.min(PR_STAGES[i].target, x + PR_STAGES[i].rate))), 900);
+    return () => clearInterval(t);
+  }, []);
+
+  const rebooked = Math.round(186 * autoPct / 100);
+  const resolveManually = (pnr) => { setPending(prev => prev.filter(p => p.pnr !== pnr)); setAutoPct(p => Math.min(96, +(p + 0.4).toFixed(1))); };
+  const results = q.trim() ? PR_SEARCH.filter(p => p.name.toLowerCase().includes(q.toLowerCase()) || p.pnr.toLowerCase().includes(q.toLowerCase())).slice(0, 1) : [];
+
+  const lvlColor = (l) => (l === "critical" || l === "bad" ? C.red : l === "warn" ? C.amber : C.green);
+  const Section = ({ id, title, count, color, children }) => (
+    <div style={{ borderBottom: `1px solid ${C.border}` }}>
+      <div onClick={() => setOpen(o => ({ ...o, [id]: !o[id] }))} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 4px", cursor: "pointer" }}>
+        <span style={{ color: C.textMuted, fontSize: 11, width: 12 }}>{open[id] ? "▾" : "▸"}</span>
+        <span style={{ width: 8, height: 8, borderRadius: "50%", background: color }} />
+        <span style={{ fontSize: 12, color: C.text, fontWeight: 600 }}>{title}</span>
+        <span style={{ marginLeft: "auto", fontFamily: "monospace", fontSize: 12, fontWeight: 700, color }}>{count}</span>
+      </div>
+      {open[id] && <div style={{ paddingBottom: 8 }}>{children}</div>}
+    </div>
+  );
+
+  return (
+    <div>
+      <SectionHeader
+        title="Passenger Recovery"
+        sub="Automated rebooking · notification · compensation · baggage recovery — unified passenger view for the active IROP"
+        badge={<AlertBadge level="critical" text="🚨 ACTIVE IROP — FL-204" />}
+      />
+
+      {/* Disruption banner + manual override */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 330px", gap: 16, marginBottom: 16 }}>
+        <div style={{ background: C.surface, border: `1px solid ${C.redDim}`, borderRadius: 8, padding: 18 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 18, alignItems: "center" }}>
+            <div>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+                <span style={{ fontSize: 22, fontWeight: 700, fontFamily: "monospace", color: C.red }}>FL-204</span>
+                <span style={{ fontSize: 13, color: C.textDim }}>DEL → BOM</span>
+              </div>
+              <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>186 passengers affected · crew duty limit · expected delay <strong style={{ color: C.amber }}>34 min</strong></div>
+            </div>
+            <div style={{ display: "flex", gap: 22 }}>
+              <div>
+                <div style={{ fontSize: 24, fontWeight: 700, fontFamily: "monospace", color: C.green }}>{autoPct.toFixed(1)}%</div>
+                <div style={{ fontSize: 10, color: C.textMuted }}>auto-rebooked · {rebooked}/186</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 24, fontWeight: 700, fontFamily: "monospace", color: pending.length ? C.red : C.green }}>{pending.length}</div>
+                <div style={{ fontSize: 10, color: C.textMuted }}>manual intervention</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 24, fontWeight: 700, fontFamily: "monospace", color: C.amber }}>₹2.4L</div>
+                <div style={{ fontSize: 10, color: C.textMuted }}>est. compensation</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Manual Override */}
+        <div style={{ background: C.surface, border: `1px solid ${C.borderBright}`, borderRadius: 8, padding: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <span style={{ fontSize: 12, color: C.text, fontWeight: 600 }}>Manual Override</span>
+            <span style={{ fontSize: 9, color: C.cyan, fontFamily: "monospace" }}>CONTROLLER</span>
+          </div>
+          <input value={q} onChange={e => { setQ(e.target.value); setAssigned(null); }} placeholder="Search passenger name or PNR…"
+            style={{ width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: "8px 10px", fontSize: 12, color: C.text, outline: "none", boxSizing: "border-box" }} />
+          {results.map((p, i) => (
+            <div key={i} style={{ marginTop: 10, background: C.bg, borderRadius: 6, padding: 10 }}>
+              <div style={{ fontSize: 12, color: C.text, fontWeight: 600 }}>{p.name}</div>
+              <div style={{ fontSize: 10, color: C.textMuted, fontFamily: "monospace" }}>PNR {p.pnr}</div>
+              <div style={{ fontSize: 11, color: lvlColor(p.level), marginTop: 4 }}>{p.status}</div>
+              {assigned && assigned.name === p.name ? (
+                <div style={{ fontSize: 11, color: C.green, marginTop: 8 }}>✓ Reassigned to {assigned.flight} · passenger notified</div>
+              ) : (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ fontSize: 9, color: C.textMuted, marginBottom: 5 }}>REASSIGN TO</div>
+                  <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                    {PR_ALT.map((f, j) => (
+                      <button key={j} onClick={() => setAssigned({ name: p.name, flight: f })} style={{ background: C.surfaceHigh, color: C.textDim, border: `1px solid ${C.border}`, borderRadius: 5, padding: "4px 8px", fontSize: 10, cursor: "pointer", fontFamily: "monospace" }}>{f}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+          {q.trim() && results.length === 0 && <div style={{ fontSize: 11, color: C.textMuted, marginTop: 10 }}>No passenger found.</div>}
+          {!q.trim() && <div style={{ fontSize: 10, color: C.textMuted, marginTop: 10, lineHeight: 1.5 }}>AI handles 94% automatically — the controller retains full override on any passenger.</div>}
+        </div>
+      </div>
+
+      {/* Status board + decision engine */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 16, marginBottom: 16 }}>
+        {/* Status board */}
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 20px 16px" }}>
+          <div style={{ fontSize: 13, color: C.textMuted, padding: "12px 0 6px" }}>Passenger Recovery Status Board</div>
+
+          <Section id="auto" title="Auto-Rebooked" count={rebooked} color={C.green}>
+            <div style={{ display: "grid", gridTemplateColumns: "1.4fr 0.9fr 0.7fr 0.6fr 0.7fr", gap: 8, fontSize: 9, color: C.textMuted, textTransform: "uppercase", padding: "4px 0", borderBottom: `1px solid ${C.border}` }}>
+              <span>Passenger</span><span>New Flight</span><span>Dep</span><span>Seat</span><span>Notify</span>
+            </div>
+            {PR_AUTO.map((p, i) => (
+              <div key={i} style={{ display: "grid", gridTemplateColumns: "1.4fr 0.9fr 0.7fr 0.6fr 0.7fr", gap: 8, fontSize: 11.5, color: C.text, padding: "7px 0", borderBottom: `1px solid ${C.border}22`, alignItems: "center" }}>
+                <span>{p.name}</span>
+                <span style={{ fontFamily: "monospace", color: C.cyan }}>{p.flight}</span>
+                <span style={{ fontFamily: "monospace", color: C.textDim }}>{p.dep}</span>
+                <span style={{ fontFamily: "monospace", color: C.textDim }}>{p.seat}</span>
+                <span style={{ color: p.notif === "Notified" ? C.green : C.amber, fontSize: 10 }}>{p.notif === "Notified" ? "✓ Sent" : "◴ Queued"}</span>
+              </div>
+            ))}
+            <div style={{ fontSize: 11, color: C.textMuted, paddingTop: 8 }}>+ {Math.max(0, rebooked - PR_AUTO.length)} more passengers auto-rebooked</div>
+          </Section>
+
+          <Section id="pending" title="Pending Rebooking" count={pending.length} color={C.red}>
+            {pending.length === 0 && <div style={{ fontSize: 11, color: C.green, padding: "8px 0" }}>✓ All passengers rebooked.</div>}
+            {pending.map((p, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 11.5, color: C.text, padding: "8px 0", borderBottom: `1px solid ${C.border}22` }}>
+                <span style={{ minWidth: 120 }}>{p.name}</span>
+                <span style={{ fontFamily: "monospace", color: C.textMuted, fontSize: 10 }}>{p.pnr}</span>
+                <span style={{ flex: 1, color: C.textDim, fontSize: 11 }}>{p.reason}</span>
+                <button onClick={() => resolveManually(p.pnr)} style={{ background: C.amberDim, color: C.amber, border: `1px solid ${C.amber}`, borderRadius: 5, padding: "4px 10px", fontSize: 10, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>Resolve Manually</button>
+              </div>
+            ))}
+          </Section>
+
+          <Section id="priority" title="High Priority" count={PR_PRIORITY.length} color={C.amber}>
+            {PR_PRIORITY.map((p, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 11.5, color: C.text, padding: "7px 0", borderBottom: `1px solid ${C.border}22` }}>
+                <span style={{ minWidth: 140 }}>{p.name}</span>
+                <span style={{ marginLeft: "auto", background: `${lvlColor(p.level)}22`, color: lvlColor(p.level), border: `1px solid ${lvlColor(p.level)}`, borderRadius: 4, padding: "2px 8px", fontSize: 10, fontWeight: 600 }}>{p.tag}</span>
+              </div>
+            ))}
+          </Section>
+
+          <Section id="comp" title="Compensation Eligible" count={PR_COMP.length} color={C.cyan}>
+            <div style={{ display: "grid", gridTemplateColumns: "1.5fr 0.8fr 0.8fr", gap: 8, fontSize: 9, color: C.textMuted, textTransform: "uppercase", padding: "4px 0", borderBottom: `1px solid ${C.border}` }}>
+              <span>Passenger</span><span>DGCA Amount</span><span>Status</span>
+            </div>
+            {PR_COMP.map((p, i) => (
+              <div key={i} style={{ display: "grid", gridTemplateColumns: "1.5fr 0.8fr 0.8fr", gap: 8, fontSize: 11.5, color: C.text, padding: "7px 0", borderBottom: `1px solid ${C.border}22`, alignItems: "center" }}>
+                <span>{p.name}</span>
+                <span style={{ fontFamily: "monospace", color: C.amber }}>{p.amount}</span>
+                <span style={{ color: p.status === "Issued" ? C.green : C.amber, fontSize: 10 }}>{p.status === "Issued" ? "✓ Issued" : "◴ Pending"}</span>
+              </div>
+            ))}
+          </Section>
+        </div>
+
+        {/* Rebooking Decision Engine */}
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16, display: "flex", flexDirection: "column" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <span style={{ fontSize: 12, color: C.text, fontWeight: 600 }}>Rebooking Decision Engine</span>
+            <span style={{ fontSize: 9, color: C.green, fontFamily: "monospace", display: "flex", alignItems: "center", gap: 5 }}><span className="iocc-live-dot" style={{ width: 6, height: 6, borderRadius: "50%", background: C.green, display: "inline-block" }} />LIVE</span>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, overflow: "hidden" }}>
+            {decisions.map((d, i) => (
+              <div key={d.id} className={i === 0 ? "iocc-pr-in" : undefined} style={{ background: C.bg, borderRadius: 6, padding: "8px 10px", borderLeft: `3px solid ${d.conf >= 90 ? C.green : C.amber}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 11.5, color: C.text, fontWeight: 600 }}>{d.name}</span>
+                  <span style={{ fontFamily: "monospace", fontSize: 11, fontWeight: 700, color: d.conf >= 90 ? C.green : C.amber }}>{d.conf}%</span>
+                </div>
+                <div style={{ fontSize: 10, color: C.textDim, fontFamily: "monospace", marginTop: 2 }}>FL-204 → {d.flight} · {d.dep}</div>
+                <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>{d.reason}</div>
+                <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                  <span style={{ fontSize: 9, color: d.notif ? C.green : C.amber }}>{d.notif ? "✓ Notified" : "◴ Notifying"}</span>
+                  {d.risk && <span style={{ fontSize: 9, color: C.amber }}>⚠ connection risk</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Notification Tracker */}
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 16 }}>
+        <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 16 }}>Passenger Notification Tracker</div>
+        <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 360, display: "flex", flexDirection: "column", gap: 12 }}>
+            {PR_STAGES.map((s, i) => (
+              <div key={i}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 4 }}>
+                  <span style={{ color: C.text }}>{i + 1}. {s.label} <span style={{ color: C.textMuted, fontSize: 9 }}>· {s.channel}</span></span>
+                  <span style={{ fontFamily: "monospace", color: stageVals[i] >= s.target ? C.green : C.amber }}>{stageVals[i]}%</span>
+                </div>
+                <div style={{ height: 8, background: C.bg, borderRadius: 4, overflow: "hidden" }}>
+                  <div style={{ width: `${stageVals[i]}%`, height: "100%", background: stageVals[i] >= s.target ? C.green : C.amber, borderRadius: 4, transition: "width 0.6s" }} />
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <div style={{ width: 96, height: 96, borderRadius: "50%", background: `conic-gradient(${(() => { let a = 0; return PR_CHANNELS.map(c => { const seg = `${c.color} ${a}% ${a + c.pct}%`; a += c.pct; return seg; }).join(", "); })()})` }} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+              {PR_CHANNELS.map((c, i) => (
+                <span key={i} style={{ fontSize: 10, color: C.textDim, display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 2, background: c.color }} />{c.ch} <span style={{ fontFamily: "monospace", color: C.textMuted }}>{c.pct}%</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Baggage Recovery */}
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 16 }}>
+        <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 14 }}>Baggage Recovery — FL-204</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 16 }}>
+          {[
+            { label: "Bags on Flight", value: "214", color: C.text },
+            { label: "Auto-Rerouted", value: "198", color: C.green },
+            { label: "Held at DEL", value: "12", color: C.amber },
+            { label: "Manual Intervention", value: "4", color: C.red },
+          ].map((b, i) => (
+            <div key={i} style={{ background: C.bg, borderRadius: 6, padding: 12 }}>
+              <div style={{ fontSize: 10, color: C.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 5 }}>{b.label}</div>
+              <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "monospace", color: b.color }}>{b.value}</div>
+            </div>
+          ))}
+        </div>
+        <svg width="100%" height={140} viewBox="0 0 900 140" style={{ background: C.bg, borderRadius: 6 }}>
+          <rect x={30} y={52} width={120} height={40} rx={6} fill={C.red} fillOpacity={0.15} stroke={C.red} />
+          <text x={90} y={70} textAnchor="middle" fontSize={12} fontWeight={700} fill={C.red} fontFamily="monospace">FL-204</text>
+          <text x={90} y={84} textAnchor="middle" fontSize={8} fill={C.textMuted} fontFamily="monospace">DEL → BOM</text>
+          {[["FL-312", 22], ["FL-508", 62], ["FL-336", 102]].map(([f, y], i) => (
+            <g key={i}>
+              <rect x={740} y={y} width={120} height={30} rx={6} fill={C.green} fillOpacity={0.13} stroke={C.green} />
+              <text x={800} y={y + 19} textAnchor="middle" fontSize={11} fontWeight={700} fill={C.green} fontFamily="monospace">{f}</text>
+              <path id={`belt${i}`} d={`M 150 72 C 420 72, 480 ${y + 15}, 740 ${y + 15}`} fill="none" stroke={C.borderBright} strokeWidth={1.5} strokeDasharray="3 4" />
+              {[0, 1, 2].map(k => (
+                <circle key={k} r={4} fill={C.amber}>
+                  <animateMotion dur="2.6s" repeatCount="indefinite" begin={`${i * 0.4 + k * 0.85}s`}>
+                    <mpath href={`#belt${i}`} />
+                  </animateMotion>
+                </circle>
+              ))}
+            </g>
+          ))}
+          <text x={445} y={20} textAnchor="middle" fontSize={9} fill={C.textMuted} fontFamily="monospace">bags following passengers to new flights →</text>
+        </svg>
+      </div>
+
+      {/* DGCA Compliance */}
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <div style={{ fontSize: 13, color: C.textMuted }}>DGCA Passenger Rights — Compliance</div>
+          <AlertBadge level="warn" text="2 IN PROGRESS" />
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
+          {PR_DGCA.map((d, i) => {
+            const col = d.status === "done" || d.status === "na" ? C.green : d.status === "progress" ? C.amber : C.red;
+            const mark = d.status === "done" ? "✓" : d.status === "na" ? "✓" : d.status === "progress" ? "◴" : "✗";
+            return (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, background: C.bg, borderRadius: 6, padding: "10px 12px" }}>
+                <span style={{ color: col, fontSize: 14, fontWeight: 700, width: 14 }}>{mark}</span>
+                <div>
+                  <div style={{ fontSize: 12, color: C.text }}>{d.item}</div>
+                  {d.note && <div style={{ fontSize: 10, color: C.textMuted, marginTop: 1 }}>{d.note}</div>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── SYSTEM ARCHITECTURE DATA ────────────────────────────────────
 const catColor = { "Flight Ops": "#3B82F6", "Weather": "#06B6D4", "Regulatory": "#F59E0B", "Ground": "#10B981" };
 
@@ -1738,6 +2111,7 @@ export default function IOCCPrototype() {
     { label: "⚡  IROP Recovery", component: <IROPRecovery /> },
     { label: "📅  Dec Crisis Replay", component: <CrisisReplay /> },
     { label: "🧑‍✈️  Crew Recovery", component: <CrewRecovery /> },
+    { label: "🎫  Passenger Recovery", component: <PassengerRecovery /> },
     { label: "🏗️  System Architecture", component: <SystemArchitecture /> },
     { label: "🤖  AI Assistant", component: <AIAssistant /> },
   ];

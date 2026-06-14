@@ -784,6 +784,395 @@ function CrisisReplay() {
   );
 }
 
+// ── CREW POSITIONING MAP (Leaflet) ──────────────────────────────
+function CrewMap({ height = 300, movements = [] }) {
+  const mapRef = useRef(null);
+  const instanceRef = useRef(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (!document.getElementById("iocc-leaflet-css")) {
+      const link = document.createElement("link");
+      link.id = "iocc-leaflet-css";
+      link.rel = "stylesheet";
+      link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+      document.head.appendChild(link);
+    }
+    if (!document.getElementById("iocc-map-style")) {
+      const style = document.createElement("style");
+      style.id = "iocc-map-style";
+      style.textContent = `
+        .leaflet-container { background: ${C.bg} !important; font-family: Inter, system-ui, sans-serif; }
+        .leaflet-control-zoom, .leaflet-control-attribution { display: none !important; }
+        .iocc-airport-label { background: transparent; border: none; box-shadow: none; color: ${C.textDim}; font-family: monospace; font-size: 8px; font-weight: 700; text-shadow: 0 0 4px ${C.bg}, 0 0 4px ${C.bg}; }
+        .iocc-crew-label { background: transparent; border: none; box-shadow: none; color: ${C.amber}; font-size: 9px; font-weight: 600; text-shadow: 0 0 4px ${C.bg}, 0 0 4px ${C.bg}; }
+      `;
+      document.head.appendChild(style);
+    }
+    if (!window.L && !document.getElementById("iocc-leaflet-js")) {
+      const script = document.createElement("script");
+      script.id = "iocc-leaflet-js";
+      script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+      script.async = true;
+      document.head.appendChild(script);
+    }
+  }, []);
+
+  useEffect(() => {
+    const t = setInterval(() => { if (window.L) { setReady(true); clearInterval(t); } }, 100);
+    return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    if (!ready || !mapRef.current) return;
+    const L = window.L;
+    if (instanceRef.current) { instanceRef.current.remove(); instanceRef.current = null; }
+
+    const map = L.map(mapRef.current, { center: [20.5, 79], zoom: 4, zoomControl: false, attributionControl: false, scrollWheelZoom: false });
+    instanceRef.current = map;
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png", { subdomains: "abcd", maxZoom: 19 }).addTo(map);
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png", { subdomains: "abcd", maxZoom: 19, opacity: 0.5 }).addTo(map);
+
+    // Crew movement arrows (deadhead positioning).
+    movements.forEach((m) => {
+      const from = MAP_AIRPORTS[m.from];
+      const to = MAP_AIRPORTS[m.to];
+      if (!from || !to) return;
+      const color = m.color || C.amber;
+      const steps = 36;
+      const dist = Math.hypot(to.lat - from.lat, to.lng - from.lng) || 1;
+      const pts = [];
+      for (let i = 0; i <= steps; i++) {
+        const f = i / steps;
+        const lat = from.lat + (to.lat - from.lat) * f;
+        const lng = from.lng + (to.lng - from.lng) * f;
+        const b = Math.sin(Math.PI * f) * dist * 0.2;
+        pts.push([lat - ((to.lng - from.lng) / dist) * b, lng + ((to.lat - from.lat) / dist) * b]);
+      }
+      L.polyline(pts, { color, weight: 2.5, opacity: 0.9, dashArray: "6,5" }).addTo(map);
+      const mi = Math.floor(steps * 0.55);
+      const mid = pts[mi];
+      const nxt = pts[mi + 1];
+      const angle = Math.atan2(nxt[1] - mid[1], nxt[0] - mid[0]) * (180 / Math.PI);
+      const icon = L.divIcon({ className: "", html: `<div style="transform:rotate(${angle}deg);color:${color};font-size:16px;line-height:1;filter:drop-shadow(0 0 3px ${color})">➤</div>`, iconSize: [16, 16], iconAnchor: [8, 8] });
+      const mk = L.marker(mid, { icon, zIndexOffset: 600 }).addTo(map);
+      mk.bindTooltip(m.crew, { permanent: true, direction: "top", offset: [0, -6], className: "iocc-crew-label" });
+    });
+
+    // Base markers (DEL/BOM/BLR/HYD/MAA), highlighted if part of a move.
+    Object.entries(MAP_AIRPORTS).forEach(([code, ap]) => {
+      const involved = movements.some((m) => m.from === code || m.to === code);
+      const color = involved ? C.cyan : C.borderBright;
+      const icon = L.divIcon({ className: "", html: `<div style="position:relative;width:18px;height:18px"><div style="position:absolute;top:5px;left:5px;width:8px;height:8px;border-radius:50%;background:${C.bg};border:2px solid ${color};box-shadow:0 0 6px ${color}"></div></div>`, iconSize: [18, 18], iconAnchor: [9, 9] });
+      const mk = L.marker([ap.lat, ap.lng], { icon }).addTo(map);
+      const dir = code === "BLR" ? "left" : "right";
+      mk.bindTooltip(code, { permanent: true, direction: dir, offset: dir === "left" ? [-8, 0] : [8, 0], className: "iocc-airport-label" });
+    });
+
+    const bounds = L.latLngBounds(Object.values(MAP_AIRPORTS).map((a) => [a.lat, a.lng]));
+    map.fitBounds(bounds, { paddingTopLeft: [30, 24], paddingBottomRight: [44, 30] });
+
+    return () => { if (instanceRef.current) { instanceRef.current.remove(); instanceRef.current = null; } };
+  }, [ready, movements]);
+
+  return <div ref={mapRef} style={{ height, borderRadius: 6, overflow: "hidden", background: C.bg }} />;
+}
+
+// ── SCREEN: CREW RECOVERY ───────────────────────────────────────
+function CrewRecovery() {
+  const [selected, setSelected] = useState(0);
+  const [executing, setExecuting] = useState(false);
+  const [approved, setApproved] = useState(false);
+  const approve = () => { setExecuting(true); setTimeout(() => { setExecuting(false); setApproved(true); }, 1800); };
+
+  const affected = [
+    { name: "Capt R. Sharma", base: "DEL", flight: "FL-204", left: "2h 14m", level: "warn" },
+    { name: "FO A. Patel", base: "DEL", flight: "FL-891", left: "1h 48m", level: "critical" },
+    { name: "Capt H. Singh", base: "BLR", flight: "FL-112", left: "3h 02m", level: "warn" },
+  ];
+  const gapFlights = ["FL-207 DEL→HYD · 20:40", "FL-219 DEL→CCU · 21:25", "FL-233 BLR→DEL · 20:15", "FL-241 BLR→BOM · 22:10"];
+
+  const reserves = [
+    { name: "Capt A. Verma", base: "DEL", rest: "14h 20m", fdtl: "13h 00m", qual: "A320 / A321neo", status: "Available" },
+    { name: "FO M. Iyer", base: "DEL", rest: "11h 50m", fdtl: "12h 30m", qual: "A320", status: "Available" },
+    { name: "Capt S. Gill", base: "DEL", rest: "13h 10m", fdtl: "13h 00m", qual: "A320 / A321neo", status: "Standby" },
+    { name: "FO K. Pillai", base: "BOM", rest: "12h 40m", fdtl: "12h 45m", qual: "A320", status: "Available" },
+    { name: "Capt V. Rao", base: "BOM", rest: "10h 30m", fdtl: "11h 15m", qual: "A321neo", status: "Positioning" },
+    { name: "FO R. Nair", base: "HYD", rest: "15h 05m", fdtl: "13h 00m", qual: "A320", status: "Available" },
+    { name: "Capt D. Banerjee", base: "BLR", rest: "9h 45m", fdtl: "10h 30m", qual: "A320", status: "Standby" },
+    { name: "FO N. Menon", base: "BLR", rest: "13h 30m", fdtl: "13h 00m", qual: "A320 / ATR72", status: "Available" },
+  ];
+
+  const options = [
+    {
+      rank: 1, label: "Local Reserve Activation", confidence: 94, cost: "₹1.8L", color: C.green,
+      detail: "All four gaps covered by reserves already at base — no positioning flights required. Lowest cost, fastest to execute, fully FDTL Phase II compliant.",
+      assignments: [
+        { crew: "Capt A. Verma", base: "DEL", flight: "FL-207 DEL→HYD", move: "Local — at DEL" },
+        { crew: "FO M. Iyer", base: "DEL", flight: "FL-219 DEL→CCU", move: "Local — at DEL" },
+        { crew: "Capt D. Banerjee", base: "BLR", flight: "FL-233 BLR→DEL", move: "Standby callout — BLR" },
+        { crew: "FO N. Menon", base: "BLR", flight: "FL-241 BLR→BOM", move: "Local — at BLR" },
+      ],
+      movements: [],
+      timeline: [
+        { flight: "FL-233 BLR→DEL", dep: 35, ready: 12 },
+        { flight: "FL-207 DEL→HYD", dep: 95, ready: 30 },
+        { flight: "FL-219 DEL→CCU", dep: 140, ready: 45 },
+        { flight: "FL-241 BLR→BOM", dep: 205, ready: 70 },
+      ],
+    },
+    {
+      rank: 2, label: "Hybrid Position + Local", confidence: 87, cost: "₹4.2L", color: C.amber,
+      detail: "Two local reserves plus two deadhead positionings (BOM→DEL, HYD→BLR). Adds positioning cost and two tight crew-in-position windows, but spreads the fatigue load across bases.",
+      assignments: [
+        { crew: "Capt A. Verma", base: "DEL", flight: "FL-207 DEL→HYD", move: "Local — at DEL" },
+        { crew: "FO K. Pillai", base: "BOM", flight: "FL-219 DEL→CCU", move: "Deadhead BOM→DEL" },
+        { crew: "FO R. Nair", base: "HYD", flight: "FL-233 BLR→DEL", move: "Deadhead HYD→BLR" },
+        { crew: "FO N. Menon", base: "BLR", flight: "FL-241 BLR→BOM", move: "Local — at BLR" },
+      ],
+      movements: [
+        { crew: "FO K. Pillai", from: "BOM", to: "DEL", color: C.amber },
+        { crew: "FO R. Nair", from: "HYD", to: "BLR", color: C.amber },
+      ],
+      timeline: [
+        { flight: "FL-233 BLR→DEL", dep: 35, ready: 18 },
+        { flight: "FL-207 DEL→HYD", dep: 95, ready: 30 },
+        { flight: "FL-219 DEL→CCU", dep: 140, ready: 118 },
+        { flight: "FL-241 BLR→BOM", dep: 205, ready: 70 },
+      ],
+    },
+    {
+      rank: 3, label: "Network Repositioning", confidence: 79, cost: "₹6.5L", color: C.amber,
+      detail: "Maximum flexibility using standby + positioning across three bases. Highest cost and the tightest crew-in-position windows — hold in reserve unless local crews are withdrawn.",
+      assignments: [
+        { crew: "Capt V. Rao", base: "BOM", flight: "FL-207 DEL→HYD", move: "Deadhead BOM→DEL (enroute)" },
+        { crew: "Capt S. Gill", base: "DEL", flight: "FL-219 DEL→CCU", move: "Standby callout — DEL" },
+        { crew: "FO R. Nair", base: "HYD", flight: "FL-233 BLR→DEL", move: "Deadhead HYD→BLR" },
+        { crew: "Capt D. Banerjee", base: "BLR", flight: "FL-241 BLR→BOM", move: "Standby callout — BLR" },
+      ],
+      movements: [
+        { crew: "Capt V. Rao", from: "BOM", to: "DEL", color: C.amber },
+        { crew: "FO R. Nair", from: "HYD", to: "BLR", color: C.amber },
+      ],
+      timeline: [
+        { flight: "FL-233 BLR→DEL", dep: 35, ready: 22 },
+        { flight: "FL-207 DEL→HYD", dep: 95, ready: 78 },
+        { flight: "FL-219 DEL→CCU", dep: 140, ready: 115 },
+        { flight: "FL-241 BLR→BOM", dep: 205, ready: 182 },
+      ],
+    },
+  ];
+  const opt = options[selected];
+  const pct = (v) => `${(v / 360) * 100}%`;
+
+  return (
+    <div>
+      <SectionHeader
+        title="Crew Recovery Engine"
+        sub="FDTL-aware reserve matching  ·  deadhead positioning  ·  human-in-the-loop approval"
+        badge={<AlertBadge level="critical" text="🚨 ACTIVE CREW SHORTFALL — DEL + BLR" />}
+      />
+
+      {/* Active crew disruption summary */}
+      <div style={{ background: C.surface, border: `1px solid ${C.redDim}`, borderRadius: 8, padding: 20, marginBottom: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 18 }}>
+          {[
+            { label: "Crew at FDTL Limit", value: "3", color: C.red },
+            { label: "Hubs Affected", value: "DEL · BLR", color: C.amber },
+            { label: "Downstream Flights at Risk", value: "4", color: C.amber },
+            { label: "Recovery Window", value: "6h 00m", color: C.text },
+          ].map((s, i) => (
+            <div key={i}>
+              <div style={{ fontSize: 10, color: C.textMuted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>{s.label}</div>
+              <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", color: s.color }}>{s.value}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 280 }}>
+            <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 8 }}>Crew timing out</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+              {affected.map((c, i) => {
+                const cc = c.level === "critical" ? C.red : C.amber;
+                return (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: cc, boxShadow: `0 0 5px ${cc}` }} />
+                    <span style={{ color: C.text }}>{c.name}</span>
+                    <span style={{ fontFamily: "monospace", color: C.textDim, fontSize: 11 }}>{c.base} · {c.flight}</span>
+                    <span style={{ marginLeft: "auto", fontFamily: "monospace", color: cc, fontWeight: 700 }}>{c.left} left</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div style={{ flex: 1, minWidth: 280 }}>
+            <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 8 }}>Downstream flights needing crew (next 6h)</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {gapFlights.map((f, i) => (
+                <span key={i} style={{ fontFamily: "monospace", fontSize: 11, color: C.cyan, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, padding: "5px 10px" }}>{f}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Reserve Crew Availability Panel */}
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 16 }}>
+        <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 14 }}>Reserve Crew Availability</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1.5fr 0.6fr 1fr 1fr 1.5fr 1fr", gap: 8, fontSize: 10, color: C.textMuted, textTransform: "uppercase", letterSpacing: 0.5, paddingBottom: 8, borderBottom: `1px solid ${C.border}` }}>
+          <span>Crew</span><span>Base</span><span>Rest Done</span><span>FDTL Avail</span><span>Qualifications</span><span>Status</span>
+        </div>
+        {reserves.map((r, i) => {
+          const sc = r.status === "Available" ? C.green : r.status === "Positioning" ? C.cyan : C.amber;
+          return (
+            <div key={i} style={{ display: "grid", gridTemplateColumns: "1.5fr 0.6fr 1fr 1fr 1.5fr 1fr", gap: 8, fontSize: 12, color: C.text, padding: "9px 0", borderBottom: i < reserves.length - 1 ? `1px solid ${C.border}` : "none", alignItems: "center" }}>
+              <span>{r.name}</span>
+              <span style={{ fontFamily: "monospace", color: C.textDim }}>{r.base}</span>
+              <span style={{ fontFamily: "monospace", color: C.textDim }}>{r.rest}</span>
+              <span style={{ fontFamily: "monospace", color: C.green }}>{r.fdtl}</span>
+              <span style={{ fontSize: 11, color: C.textDim }}>{r.qual}</span>
+              <span><span style={{ background: `${sc}22`, color: sc, border: `1px solid ${sc}`, borderRadius: 4, padding: "2px 8px", fontSize: 10, fontWeight: 600 }}>{r.status}</span></span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* AI-Generated Crew Recovery Plan */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <div style={{ fontSize: 13, color: C.textMuted }}>AI-Generated Crew Recovery Plan</div>
+          <span style={{ fontSize: 10, color: C.cyan, fontFamily: "monospace", letterSpacing: 1 }}>AI PROPOSES · CONTROLLER APPROVES</span>
+        </div>
+
+        {!approved ? (
+          <div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {options.map((o, i) => (
+                <div key={i} onClick={() => setSelected(i)} style={{ background: C.surface, border: `1px solid ${selected === i ? o.color : C.border}`, borderRadius: 8, padding: 18, cursor: "pointer", transition: "border-color 0.2s" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <div style={{ width: 26, height: 26, borderRadius: "50%", background: o.color, color: C.bg, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 12 }}>{o.rank}</div>
+                      <span style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{o.label}</span>
+                      <AlertBadge level="ok" text="FDTL ✓" />
+                      {i === 0 && <span style={{ fontSize: 10, color: C.green, fontWeight: 700, letterSpacing: 0.5 }}>RECOMMENDED</span>}
+                    </div>
+                    <div style={{ display: "flex", gap: 18 }}>
+                      <div style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: 10, color: C.textMuted }}>CONFIDENCE</div>
+                        <div style={{ fontFamily: "monospace", fontSize: 16, fontWeight: 700, color: o.color }}>{o.confidence}%</div>
+                      </div>
+                      <div style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: 10, color: C.textMuted }}>POSITIONING</div>
+                        <div style={{ fontFamily: "monospace", fontSize: 16, fontWeight: 700, color: C.textDim }}>{o.cost}</div>
+                      </div>
+                      <div style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: 10, color: C.textMuted }}>DEADHEADS</div>
+                        <div style={{ fontFamily: "monospace", fontSize: 16, fontWeight: 700, color: C.text }}>{o.movements.length}</div>
+                      </div>
+                    </div>
+                  </div>
+                  {selected === i && (
+                    <div style={{ marginTop: 12 }}>
+                      <div style={{ fontSize: 12, color: C.textDim, padding: "10px 12px", background: C.bg, borderRadius: 6, marginBottom: 10 }}>{o.detail}</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
+                        {o.assignments.map((a, j) => (
+                          <div key={j} style={{ background: C.bg, borderRadius: 6, padding: "8px 10px", fontSize: 11 }}>
+                            <div style={{ color: C.text }}><strong>{a.crew}</strong> <span style={{ color: C.textMuted }}>({a.base})</span></div>
+                            <div style={{ color: C.cyan, fontFamily: "monospace", fontSize: 11 }}>{a.flight}</div>
+                            <div style={{ color: a.move.startsWith("Deadhead") ? C.amber : C.textDim, fontSize: 10 }}>{a.move}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: 16, display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
+              <button onClick={approve} disabled={executing}
+                style={{ background: C.green, color: C.bg, border: "none", borderRadius: 6, padding: "12px 28px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                {executing ? "⟳ EXECUTING..." : `✓ APPROVE OPTION ${opt.rank} — ${opt.label}`}
+              </button>
+              <span style={{ fontSize: 11, color: C.textMuted }}>Controller authorisation required · the AI proposes but cannot self-execute</span>
+            </div>
+          </div>
+        ) : (
+          <div style={{ background: C.surface, border: `1px solid ${C.green}`, borderRadius: 8, padding: 28, textAlign: "center" }}>
+            <div style={{ fontSize: 34, marginBottom: 10 }}>✅</div>
+            <div style={{ fontSize: 19, fontWeight: 700, color: C.green, marginBottom: 6 }}>Crew Recovery Approved & Executing</div>
+            <div style={{ fontSize: 13, color: C.textDim, marginBottom: 20 }}>Option {opt.rank}: {opt.label} · {opt.cost} positioning · {opt.confidence}% confidence</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, maxWidth: 640, margin: "0 auto" }}>
+              {["Crew assignments transmitted to roster", "Reserve crew notified via crew app", "Deadhead tickets issued", "FDTL & duty records updated", "4 downstream flights re-crewed", "Ops + dispatch briefed"].map((s, i) => (
+                <div key={i} style={{ background: C.bg, borderRadius: 6, padding: 10, fontSize: 11, color: C.green }}>✓ {s}</div>
+              ))}
+            </div>
+            <div style={{ marginTop: 18, fontSize: 13, color: C.textMuted }}>Recovery plan approved by controller in <strong style={{ color: C.green }}>1 min 52 sec</strong> · all assignments FDTL Phase II compliant</div>
+            <button onClick={() => { setApproved(false); setExecuting(false); setSelected(0); }}
+              style={{ marginTop: 18, background: "transparent", color: C.textMuted, border: `1px solid ${C.border}`, borderRadius: 6, padding: "8px 20px", fontSize: 12, cursor: "pointer" }}>
+              Reset Demo
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Crew Positioning Map */}
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <div style={{ fontSize: 13, color: C.textMuted }}>Crew Positioning Map — {opt.label}</div>
+          <div style={{ fontSize: 11, color: opt.movements.length ? C.amber : C.green }}>
+            {opt.movements.length ? `${opt.movements.length} deadhead positioning move${opt.movements.length > 1 ? "s" : ""}` : "No positioning required — reserves already at base"}
+          </div>
+        </div>
+        <CrewMap movements={opt.movements} />
+        {opt.movements.length > 0 && (
+          <div style={{ display: "flex", gap: 16, marginTop: 8, flexWrap: "wrap" }}>
+            {opt.movements.map((m, i) => <span key={i} style={{ fontSize: 10, color: C.amber }}>➤ {m.crew}: {m.from} → {m.to} (deadhead)</span>)}
+          </div>
+        )}
+      </div>
+
+      {/* Crew Recovery Timeline */}
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div style={{ fontSize: 13, color: C.textMuted }}>Crew Recovery Timeline — Next 6 Hours</div>
+          <div style={{ display: "flex", gap: 14, fontSize: 10 }}>
+            <span style={{ color: C.cyan }}>◆ Crew in position</span>
+            <span style={{ color: C.text }}>✈ Flight departs</span>
+            <span style={{ color: C.amber }}>▬ &lt;30 min buffer</span>
+          </div>
+        </div>
+        {/* axis */}
+        <div style={{ display: "flex", alignItems: "center", marginBottom: 6 }}>
+          <div style={{ width: 150 }} />
+          <div style={{ position: "relative", flex: 1, height: 14 }}>
+            {[0, 1, 2, 3, 4, 5, 6].map((h) => (
+              <span key={h} style={{ position: "absolute", left: pct(h * 60), transform: h === 0 ? "none" : h === 6 ? "translateX(-100%)" : "translateX(-50%)", fontSize: 10, color: C.textMuted }}>{h === 0 ? "Now" : `+${h}h`}</span>
+            ))}
+          </div>
+        </div>
+        {opt.timeline.map((row, i) => {
+          const buffer = row.dep - row.ready;
+          const tight = buffer < 30;
+          return (
+            <div key={i} style={{ display: "flex", alignItems: "center", margin: "10px 0" }}>
+              <div style={{ width: 150, fontSize: 12, fontFamily: "monospace", color: C.text }}>{row.flight}</div>
+              <div style={{ position: "relative", flex: 1, height: 26, background: C.bg, borderRadius: 4, border: `1px solid ${C.border}` }}>
+                <div style={{ position: "absolute", left: pct(row.ready), width: `${(buffer / 360) * 100}%`, top: 8, height: 10, background: tight ? C.amber : C.green, opacity: 0.6, borderRadius: 5 }} />
+                <div style={{ position: "absolute", left: pct(row.ready), top: 5, transform: "translateX(-50%)", color: C.cyan, fontSize: 13 }}>◆</div>
+                <div style={{ position: "absolute", left: pct(row.dep), top: 4, transform: "translateX(-50%)", fontSize: 13 }}>✈</div>
+                <span style={{ position: "absolute", left: pct((row.ready + row.dep) / 2), top: -13, transform: "translateX(-50%)", fontSize: 9, color: tight ? C.amber : C.textMuted, whiteSpace: "nowrap", fontWeight: tight ? 700 : 400 }}>{tight ? `⚠ ${buffer}m buffer` : `${buffer}m buffer`}</span>
+              </div>
+            </div>
+          );
+        })}
+        {opt.timeline.some((r) => r.dep - r.ready < 30) && (
+          <div style={{ marginTop: 10, fontSize: 11, color: C.amber }}>⚠ Amber windows have under 30 minutes of crew-in-position buffer — monitor closely; any further slip risks an FDTL breach.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── LIVE-NETWORK SYSTEM PROMPT ──────────────────────────────────
 // This is the full operating context for the assistant. It is used verbatim as
 // the `system` prompt when the assistant runs against live Claude (proxy/key).
@@ -976,6 +1365,7 @@ export default function IOCCPrototype() {
     { label: "🔮  Disruption Prediction", component: <DisruptionPrediction /> },
     { label: "⚡  IROP Recovery", component: <IROPRecovery /> },
     { label: "📅  Dec Crisis Replay", component: <CrisisReplay /> },
+    { label: "🧑‍✈️  Crew Recovery", component: <CrewRecovery /> },
     { label: "🤖  AI Assistant", component: <AIAssistant /> },
   ];
 

@@ -346,6 +346,8 @@ const IOCC_ANIM_CSS = `
   .iocc-glow-amber { animation: ioccGlowAmber 2s ease-in-out infinite; }
   @keyframes ioccGlowRed { 0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); } 50% { box-shadow: 0 0 16px 1px rgba(239,68,68,0.6); } }
   .iocc-glow-red { animation: ioccGlowRed 2s ease-in-out infinite; }
+  @keyframes ioccFade { from { opacity: 0; } to { opacity: 1; } }
+  .iocc-fade { animation: ioccFade 0.32s ease; }
 `;
 function injectAnim() {
   if (document.getElementById("iocc-anim")) return;
@@ -2105,20 +2107,33 @@ function SystemArchitecture() {
 
 // ── MAIN APP ────────────────────────────────────────────────────
 export default function IOCCPrototype() {
-  const [tab, setTab] = useState(0);
+  const [parent, setParent] = useState(0);
+  const [sub, setSub] = useState(0);
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
   useEffect(() => { injectAnim(); }, []);
-  const tabs = [
-    { label: "🖥️  OCC Dashboard", component: <Dashboard /> },
-    { label: "🔮  Disruption Prediction", component: <DisruptionPrediction /> },
-    { label: "⚡  IROP Recovery", component: <IROPRecovery /> },
-    { label: "📅  Dec Crisis Replay", component: <CrisisReplay /> },
-    { label: "🧑‍✈️  Crew Recovery", component: <CrewRecovery /> },
-    { label: "🎫  Passenger Recovery", component: <PassengerRecovery /> },
-    { label: "🏗️  System Architecture", component: <SystemArchitecture /> },
-    { label: "🤖  ARIA — AI Assistant", component: <AIAssistant /> },
+  const NAV = [
+    { id: "OPERATIONS", subs: [
+      { label: "OCC Dashboard", component: <Dashboard /> },
+      { label: "IROP Recovery", component: <IROPRecovery /> },
+      { label: "Crew Recovery", component: <CrewRecovery /> },
+      { label: "Passenger Recovery", component: <PassengerRecovery /> },
+    ] },
+    { id: "INTELLIGENCE", subs: [
+      { label: "Disruption Prediction", component: <DisruptionPrediction /> },
+      { label: "Crisis Replay", component: <CrisisReplay /> },
+    ] },
+    { id: "ARCHITECTURE", subs: [
+      { label: "System Architecture", component: <SystemArchitecture /> },
+    ] },
+    { id: "ARIA", subs: [
+      { label: "ARIA", component: <AIAssistant /> },
+    ] },
   ];
+  const selectParent = (i) => { setParent(i); setSub(0); };
+  const activeParent = NAV[parent];
+  const showSubRow = activeParent.subs.length > 1;
+  const content = activeParent.subs[Math.min(sub, activeParent.subs.length - 1)].component;
 
   return (
     <div style={{ background: C.bg, minHeight: "100vh", color: C.text, fontFamily: "Inter, system-ui, sans-serif" }}>
@@ -2141,26 +2156,54 @@ export default function IOCCPrototype() {
           </div>
         </div>
 
-        {/* Tabs */}
-        <div style={{ display: "flex", gap: 2 }}>
-          {tabs.map((t, i) => (
-            <button key={i} onClick={() => setTab(i)}
-              style={{
-                background: tab === i ? C.surfaceHigh : "transparent",
-                color: tab === i ? C.text : C.textMuted,
-                border: "none", borderBottom: tab === i ? `2px solid ${C.blue}` : "2px solid transparent",
-                padding: "10px 16px", fontSize: 12, fontWeight: tab === i ? 600 : 400,
-                cursor: "pointer", transition: "all 0.15s",
-              }}>
-              {t.label}
-            </button>
-          ))}
+        {/* Parent navigation */}
+        <div style={{ display: "flex", gap: 4 }}>
+          {NAV.map((p, i) => {
+            const active = parent === i;
+            const isAria = p.id === "ARIA";
+            const accent = isAria ? C.green : C.blue;
+            return (
+              <button key={p.id} onClick={() => selectParent(i)}
+                style={{
+                  background: "transparent",
+                  color: active ? (isAria ? C.green : C.text) : (isAria ? C.green : C.textMuted),
+                  border: "none", borderBottom: active ? `2px solid ${accent}` : "2px solid transparent",
+                  padding: "11px 18px", fontSize: 13, fontWeight: active ? 700 : 500,
+                  letterSpacing: 1.5, cursor: "pointer", transition: "all 0.15s",
+                  display: "flex", alignItems: "center", gap: 8,
+                }}>
+                {p.id}
+                {isAria && <span className="iocc-live-dot" style={{ width: 7, height: 7, borderRadius: "50%", background: C.green, boxShadow: `0 0 6px ${C.green}`, display: "inline-block" }} />}
+              </button>
+            );
+          })}
         </div>
+
+        {/* Sub navigation */}
+        {showSubRow && (
+          <div key={parent} className="iocc-fade" style={{ display: "flex", gap: 2, borderTop: `1px solid ${C.border}` }}>
+            {activeParent.subs.map((s, i) => {
+              const active = sub === i;
+              return (
+                <button key={i} onClick={() => setSub(i)}
+                  style={{
+                    background: active ? C.surfaceHigh : "transparent",
+                    color: active ? C.text : C.textMuted,
+                    border: "none", borderBottom: active ? `2px solid ${C.blue}` : "2px solid transparent",
+                    padding: "7px 14px", fontSize: 11.5, fontWeight: active ? 600 : 400,
+                    cursor: "pointer", transition: "all 0.15s",
+                  }}>
+                  {s.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Content */}
       <div style={{ padding: "24px", maxWidth: 1200, margin: "0 auto" }}>
-        {tabs[tab].component}
+        <div key={`${parent}-${sub}`} className="iocc-fade">{content}</div>
       </div>
 
       {/* Footer */}

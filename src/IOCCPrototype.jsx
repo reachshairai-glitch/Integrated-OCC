@@ -306,6 +306,32 @@ const ALERT_POOL = [
   { code: "FL-734", issue: "Thunderstorm cell tracking toward CCU approach corridor", level: "critical", action: "Reroute under review" },
 ];
 
+// Flights-airborne baseline by IST hour — realistic daily ops curve.
+// Low overnight, climbs to a 10:00–14:00 peak (~220), mid-afternoon dip,
+// a second 18:00–20:00 peak, then drops sharply after 22:00 to near zero.
+const AIRBORNE_CURVE = [
+  [0, 8], [3, 4], [5, 18], [6, 55], [7, 110], [8, 155], [9, 185],
+  [10, 210], [11, 218], [12, 220], [13, 218], [14, 212],
+  [15, 196], [16, 184], [17, 194], [18, 208], [19, 216], [20, 209],
+  [21, 172], [22, 108], [23, 46], [24, 8],
+];
+
+function airborneBaseline(d = new Date()) {
+  const [hh, mm] = d.toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour12: false, hour: "2-digit", minute: "2-digit" }).split(":").map(Number);
+  const t = hh + mm / 60;
+  for (let i = 0; i < AIRBORNE_CURVE.length - 1; i++) {
+    const [h0, v0] = AIRBORNE_CURVE[i];
+    const [h1, v1] = AIRBORNE_CURVE[i + 1];
+    if (t >= h0 && t <= h1) return v0 + (v1 - v0) * ((t - h0) / (h1 - h0));
+  }
+  return AIRBORNE_CURVE[AIRBORNE_CURVE.length - 1][1];
+}
+
+// Curve value for the current moment plus a small ±5 jitter so it looks live.
+function airborneNow(d = new Date()) {
+  return Math.max(0, Math.round(airborneBaseline(d) + (Math.random() * 10 - 5)));
+}
+
 // ── SCREEN: DASHBOARD ───────────────────────────────────────────
 function Dashboard() {
   // Inject animation keyframes once (pulse glow, blinking live dot, alert slide-in).
@@ -325,7 +351,7 @@ function Dashboard() {
   }, []);
 
   // Live KPI state — each tile random-walks within a realistic band, every 4s.
-  const [kpi, setKpi] = useState({ otp: 87.2, airborne: 437, flightsToday: 2247, cancellations: 4, crew: 91.4, risk: 38, pax: 1840 });
+  const [kpi, setKpi] = useState(() => ({ otp: 87.2, airborne: airborneNow(), flightsToday: 2247, cancellations: 4, crew: 91.4, risk: 38, pax: 1840 }));
   useEffect(() => {
     const wander = (v, step, min, max) => Math.max(min, Math.min(max, v + (Math.random() - 0.5) * step));
     const t = setInterval(() => {
@@ -342,10 +368,10 @@ function Dashboard() {
     return () => clearInterval(t);
   }, []);
 
-  // Flights airborne refreshes faster for a real-time feel.
+  // Flights airborne follows the day's IST traffic curve (+/- small jitter), refreshed every 2s.
   useEffect(() => {
     const t = setInterval(() => {
-      setKpi(k => ({ ...k, airborne: Math.max(388, Math.min(496, Math.round(k.airborne + (Math.random() - 0.5) * 10))) }));
+      setKpi(k => ({ ...k, airborne: airborneNow() }));
     }, 2000);
     return () => clearInterval(t);
   }, []);

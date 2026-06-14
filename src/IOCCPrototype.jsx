@@ -31,18 +31,34 @@ function toAmPm(time) {
   return `${h12}:${String(m).padStart(2, "0")} ${period}`;
 }
 
+// Current time as "HH:MM" in IST (UTC + 5:30), independent of the browser zone.
+function istHHMM(d = new Date()) {
+  const ist = new Date(d.getTime() + 5.5 * 3600000);
+  return `${String(ist.getUTCHours()).padStart(2, "0")}:${String(ist.getUTCMinutes()).padStart(2, "0")}`;
+}
+
 // ── SIMULATED LIVE DATA ─────────────────────────────────────────
+// Full operating day, 06:00 → 23:00 IST in 1-hour steps. OTP dips during the
+// morning (08–11) and evening (17–20) peaks; cancellations move inversely.
 const flightData = [
-  { time: "06:00", flights: 180, cancelled: 2, otpPct: 94 },
-  { time: "07:00", flights: 220, cancelled: 3, otpPct: 91 },
-  { time: "08:00", flights: 260, cancelled: 5, otpPct: 88 },
-  { time: "09:00", flights: 290, cancelled: 4, otpPct: 90 },
-  { time: "10:00", flights: 310, cancelled: 6, otpPct: 87 },
-  { time: "11:00", flights: 280, cancelled: 3, otpPct: 92 },
-  { time: "12:00", flights: 250, cancelled: 2, otpPct: 94 },
-  { time: "13:00", flights: 240, cancelled: 4, otpPct: 89 },
-  { time: "14:00", flights: 270, cancelled: 5, otpPct: 87 },
-  { time: "15:00", flights: 300, cancelled: 7, otpPct: 85 },
+  { time: "06:00", flights: 180, cancelled: 1, otpPct: 94 },
+  { time: "07:00", flights: 230, cancelled: 2, otpPct: 92 },
+  { time: "08:00", flights: 290, cancelled: 5, otpPct: 87 },
+  { time: "09:00", flights: 310, cancelled: 7, otpPct: 85 },
+  { time: "10:00", flights: 320, cancelled: 8, otpPct: 86 },
+  { time: "11:00", flights: 300, cancelled: 6, otpPct: 87 },
+  { time: "12:00", flights: 270, cancelled: 4, otpPct: 90 },
+  { time: "13:00", flights: 260, cancelled: 3, otpPct: 92 },
+  { time: "14:00", flights: 280, cancelled: 3, otpPct: 91 },
+  { time: "15:00", flights: 300, cancelled: 4, otpPct: 90 },
+  { time: "16:00", flights: 300, cancelled: 5, otpPct: 88 },
+  { time: "17:00", flights: 310, cancelled: 7, otpPct: 86 },
+  { time: "18:00", flights: 320, cancelled: 8, otpPct: 85 },
+  { time: "19:00", flights: 300, cancelled: 6, otpPct: 86 },
+  { time: "20:00", flights: 270, cancelled: 5, otpPct: 87 },
+  { time: "21:00", flights: 210, cancelled: 2, otpPct: 91 },
+  { time: "22:00", flights: 150, cancelled: 2, otpPct: 92 },
+  { time: "23:00", flights: 90, cancelled: 1, otpPct: 93 },
 ];
 
 const riskForecast = [
@@ -387,7 +403,7 @@ function Dashboard() {
   const [otpSeries, setOtpSeries] = useState(flightData);
   useEffect(() => {
     const t = setInterval(() => {
-      const time = new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: false });
+      const time = istHHMM();
       setOtpSeries(prev => {
         const last = prev[prev.length - 1];
         const otpPct = Math.max(82, Math.min(95, +(((last && last.otpPct) || 87) + (Math.random() * 3 - 1.5)).toFixed(1)));
@@ -405,7 +421,7 @@ function Dashboard() {
     const t = setInterval(() => {
       const a = ALERT_POOL[poolIdx.current % ALERT_POOL.length];
       poolIdx.current += 1;
-      const time = new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: false });
+      const time = istHHMM();
       setAlerts(prev => [{ ...a, time, id: alertId.current++ }, ...prev].slice(0, 5));
     }, 8000);
     return () => clearInterval(t);

@@ -787,6 +787,30 @@ function CrisisReplay() {
 // Red / amber / green by how much buffer (minutes) exists before the covered flight departs.
 const bufferColor = (min) => (min < 20 ? C.red : min < 40 ? C.amber : C.green);
 
+// Flights departing each hub in the next 3 hours (shown in the hover card).
+const HUB_DEPARTURES = {
+  DEL: [
+    { flight: "FL-204", to: "BOM", time: "19:55" },
+    { flight: "FL-207", to: "HYD", time: "20:40" },
+    { flight: "FL-219", to: "CCU", time: "21:25" },
+  ],
+  BOM: [
+    { flight: "FL-318", to: "DEL", time: "20:10" },
+    { flight: "FL-552", to: "MAA", time: "21:05" },
+  ],
+  BLR: [
+    { flight: "FL-233", to: "DEL", time: "20:15" },
+    { flight: "FL-241", to: "BOM", time: "22:10" },
+  ],
+  HYD: [
+    { flight: "FL-446", to: "BLR", time: "20:30" },
+    { flight: "FL-615", to: "BOM", time: "21:40" },
+  ],
+  MAA: [
+    { flight: "FL-129", to: "DEL", time: "20:50" },
+  ],
+};
+
 // ── CREW POSITIONING MAP (Leaflet) ──────────────────────────────
 function CrewMap({ height = 340, movements = [], reserves = [] }) {
   const mapRef = useRef(null);
@@ -876,32 +900,25 @@ function CrewMap({ height = 340, movements = [], reserves = [] }) {
         const b = Math.sin(Math.PI * f) * dist * (0.18 + idx * 0.06);
         pts.push([lat - ((to.lng - from.lng) / dist) * b, lng + ((to.lat - from.lat) / dist) * b]);
       }
-      L.polyline(pts, { color, weight: 7, opacity: 0.12 }).addTo(map); // soft glow
-      L.polyline(pts, { color, weight: 2.5, opacity: 0.95, dashArray: "6,6", className: "iocc-flow" }).addTo(map); // flowing dashes
+      const glow = L.polyline(pts, { color, weight: 8, opacity: 0.14 }).addTo(map); // glow + hover target
+      L.polyline(pts, { color, weight: 2.5, opacity: 0.95, dashArray: "6,6", className: "iocc-flow", interactive: false }).addTo(map); // flowing dashes
 
       const mi = Math.floor(steps * 0.55);
       const mid = pts[mi];
       const nxt = pts[mi + 1];
       const angle = Math.atan2(nxt[1] - mid[1], nxt[0] - mid[0]) * (180 / Math.PI);
       const arrow = L.divIcon({ className: "", html: `<div style="transform:rotate(${angle}deg);color:${color};font-size:16px;line-height:1;filter:drop-shadow(0 0 3px ${color})">➤</div>`, iconSize: [16, 16], iconAnchor: [8, 8] });
-      const arrowMk = L.marker(mid, { icon: arrow, zIndexOffset: 600, interactive: true }).addTo(map);
-      // Full detail card — shown on hover only.
-      const card = `<div style="padding:6px 8px;border-left:3px solid ${color};min-width:128px">
+      L.marker(mid, { icon: arrow, zIndexOffset: 600, interactive: false }).addTo(map);
+
+      // Detail card — appears only on hover, anywhere along the arrow.
+      const card = `<div style="padding:7px 9px;border-left:3px solid ${color};min-width:140px">
         <div style="font-size:11px;font-weight:700;color:${C.text}">${m.crew}</div>
         <div style="font-size:9px;color:${C.textMuted}">${m.role}</div>
-        <div style="font-size:9px;color:${C.textDim};font-family:monospace;margin-top:3px">${m.from}→${m.to} · dep ${m.dep} → arr ${m.arr}</div>
-        <div style="font-size:9px;color:${color};font-weight:700;margin-top:2px">cover ${m.flight} · ${m.buffer}m buffer</div>
+        <div style="font-size:9px;color:${C.textDim};font-family:monospace;margin-top:4px">${m.from} → ${m.to}</div>
+        <div style="font-size:9px;color:${C.textDim};font-family:monospace">dep ${m.dep} · arr ${m.arr}</div>
+        <div style="font-size:9px;color:${color};font-weight:700;margin-top:3px">cover ${m.flight} · ${m.buffer}m buffer</div>
       </div>`;
-      arrowMk.bindTooltip(card, { permanent: false, direction: "top", offset: [0, -10], className: "iocc-crew-card" });
-      // Compact permanent chip — name + buffer, colour-coded.
-      const short = m.crew.replace(/^(Capt|FO)\s+/, "");
-      const chip = `<div style="background:${C.surface};border:1px solid ${color};color:${color};border-radius:10px;padding:1px 6px;font-size:9px;font-weight:700;font-family:monospace;white-space:nowrap">${short} · ${m.buffer}m</div>`;
-      const chipMk = L.marker(mid, { icon: L.divIcon({ className: "", html: "", iconSize: [0, 0] }), interactive: false, zIndexOffset: 550 }).addTo(map);
-      chipMk.bindTooltip(chip, { permanent: true, direction: "top", offset: [0, -7 - idx * 15], className: "iocc-crew-chip" });
-
-      // Flight tag at the destination showing the flight being recovered.
-      const tag = L.divIcon({ className: "", html: `<div class="iocc-flighttag" style="color:${color};border:1px solid ${color}">✈ ${m.flight}</div>`, iconSize: [1, 1], iconAnchor: [-9, 4 + idx * 16] });
-      L.marker([to.lat, to.lng], { icon: tag, interactive: false, zIndexOffset: 400 }).addTo(map);
+      glow.bindTooltip(card, { sticky: true, direction: "top", className: "iocc-crew-card" });
     });
 
     // Hub markers with a capacity-pressure ring + clickable crew-availability popup.
@@ -919,19 +936,23 @@ function CrewMap({ height = 340, movements = [], reserves = [] }) {
         </div></div>`;
       const icon = L.divIcon({ className: "", html, iconSize: [26, 26], iconAnchor: [13, 13] });
       const mk = L.marker([ap.lat, ap.lng], { icon }).addTo(map);
-      const dir = code === "BLR" ? "left" : "right";
-      mk.bindTooltip(code, { permanent: true, direction: dir, offset: dir === "left" ? [-13, 0] : [13, 0], className: "iocc-airport-label" });
 
+      // Hover card: airport, hub name, crew based, incoming movements, next-3h departures.
       const hubReserves = reserves.filter((r) => r.base === code);
-      const rows = hubReserves.length
-        ? hubReserves.map((r) => {
-            const sc = r.status === "Available" ? C.green : r.status === "Positioning" ? C.cyan : C.amber;
-            return `<div style="display:flex;justify-content:space-between;gap:12px;font-size:11px;margin:3px 0"><span style="color:${C.text}">${r.name}</span><span style="color:${sc}">${r.status}</span></div>`;
-          }).join("")
-        : `<div style="font-size:11px;color:${C.textMuted}">No reserves based here</div>`;
-      const pressLabel = arrivals >= 3 ? "high pressure" : arrivals === 2 ? "moderate pressure" : arrivals === 1 ? "low pressure" : "no inbound pressure";
-      const pressLine = arrivals > 0 ? `${arrivals} crew movement${arrivals === 1 ? "" : "s"} converging · ${pressLabel}` : "No inbound crew movements";
-      mk.bindPopup(`<div style="min-width:184px"><div style="color:${C.cyan};font-weight:700;font-size:13px;margin-bottom:6px">${code} — Reserve Crew</div>${rows}<div style="font-size:10px;color:${arrivals > 0 ? pColor : C.textMuted};margin-top:8px;border-top:1px solid ${C.border};padding-top:6px">${pressLine}</div></div>`, { className: "iocc-hub-popup" });
+      const deps = HUB_DEPARTURES[code] || [];
+      const depRows = deps.length
+        ? deps.map((d) => `<div style="display:flex;justify-content:space-between;gap:10px;font-size:10px;margin:2px 0"><span style="color:${C.cyan};font-family:monospace">${d.flight} → ${d.to}</span><span style="color:${C.textDim};font-family:monospace">${d.time}</span></div>`).join("")
+        : `<div style="font-size:10px;color:${C.textMuted}">None in window</div>`;
+      const hubCard = `<div style="padding:8px 10px;min-width:188px">
+        <div style="font-size:12px;font-weight:700;color:${C.text}">${code} <span style="color:${C.textMuted};font-weight:400">— ${ap.name}</span></div>
+        <div style="display:flex;gap:20px;margin-top:6px">
+          <div><div style="font-size:9px;color:${C.textMuted};text-transform:uppercase;letter-spacing:0.5px">Crew based</div><div style="font-size:14px;font-weight:700;color:${C.text};font-family:monospace">${hubReserves.length}</div></div>
+          <div><div style="font-size:9px;color:${C.textMuted};text-transform:uppercase;letter-spacing:0.5px">Incoming</div><div style="font-size:14px;font-weight:700;color:${arrivals > 0 ? pColor : C.textDim};font-family:monospace">${arrivals}</div></div>
+        </div>
+        <div style="font-size:9px;color:${C.textMuted};margin-top:8px;text-transform:uppercase;letter-spacing:0.5px">Departures · next 3h</div>
+        <div style="margin-top:3px">${depRows}</div>
+      </div>`;
+      mk.bindTooltip(hubCard, { sticky: false, direction: "auto", className: "iocc-crew-card" });
     });
 
     const bounds = L.latLngBounds(Object.values(MAP_AIRPORTS).map((a) => [a.lat, a.lng]));
@@ -1193,17 +1214,11 @@ function CrewRecovery() {
         </div>
         <CrewMap movements={opt.movements} reserves={reserves} />
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, marginTop: 8, flexWrap: "wrap" }}>
-          <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-            {opt.movements.map((m, i) => {
-              const col = bufferColor(m.buffer);
-              return <span key={i} style={{ fontSize: 10, color: col }}>➤ {m.crew} ({m.role}) {m.from}→{m.to} · {m.flight} · {m.buffer}m buffer</span>;
-            })}
-          </div>
+          <span style={{ fontSize: 10, color: C.textMuted }}>Hover any hub or crew arrow for detail · ring shows incoming-crew pressure</span>
           <div style={{ display: "flex", gap: 12, fontSize: 10 }}>
-            <span style={{ color: C.green }}>● &gt;40m</span>
+            <span style={{ color: C.green }}>● &gt;40m buffer</span>
             <span style={{ color: C.amber }}>● 20–40m</span>
             <span style={{ color: C.red }}>● &lt;20m</span>
-            <span style={{ color: C.textMuted }}>◍ hub pressure · click hub for crew</span>
           </div>
         </div>
       </div>

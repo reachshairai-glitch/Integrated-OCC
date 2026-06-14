@@ -784,8 +784,11 @@ function CrisisReplay() {
   );
 }
 
+// Red / amber / green by how much buffer (minutes) exists before the covered flight departs.
+const bufferColor = (min) => (min < 20 ? C.red : min < 40 ? C.amber : C.green);
+
 // ── CREW POSITIONING MAP (Leaflet) ──────────────────────────────
-function CrewMap({ height = 300, movements = [] }) {
+function CrewMap({ height = 340, movements = [], reserves = [] }) {
   const mapRef = useRef(null);
   const instanceRef = useRef(null);
   const [ready, setReady] = useState(false);
@@ -805,9 +808,23 @@ function CrewMap({ height = 300, movements = [] }) {
         .leaflet-container { background: ${C.bg} !important; font-family: Inter, system-ui, sans-serif; }
         .leaflet-control-zoom, .leaflet-control-attribution { display: none !important; }
         .iocc-airport-label { background: transparent; border: none; box-shadow: none; color: ${C.textDim}; font-family: monospace; font-size: 8px; font-weight: 700; text-shadow: 0 0 4px ${C.bg}, 0 0 4px ${C.bg}; }
-        .iocc-crew-label { background: transparent; border: none; box-shadow: none; color: ${C.amber}; font-size: 9px; font-weight: 600; text-shadow: 0 0 4px ${C.bg}, 0 0 4px ${C.bg}; }
       `;
       document.head.appendChild(style);
+    }
+    // Crew-map-specific styling: flowing arrows, crew label cards, flight tags, hub popups.
+    if (!document.getElementById("iocc-crewmap-style")) {
+      const s = document.createElement("style");
+      s.id = "iocc-crewmap-style";
+      s.textContent = `
+        @keyframes ioccFlow { to { stroke-dashoffset: -24; } }
+        .iocc-flow { animation: ioccFlow 0.9s linear infinite; }
+        .leaflet-tooltip.iocc-crew-card { background: ${C.surfaceHigh}; border: 1px solid ${C.borderBright}; border-radius: 6px; box-shadow: 0 2px 10px rgba(0,0,0,0.45); padding: 0; }
+        .leaflet-tooltip.iocc-crew-card::before { display: none; }
+        .iocc-flighttag { font-family: monospace; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 4px; white-space: nowrap; background: ${C.bg}; }
+        .iocc-hub-popup .leaflet-popup-content-wrapper { background: ${C.surfaceHigh} !important; border: 1px solid ${C.borderBright} !important; border-radius: 8px !important; color: ${C.text} !important; }
+        .iocc-hub-popup .leaflet-popup-tip { background: ${C.surfaceHigh} !important; }
+      `;
+      document.head.appendChild(s);
     }
     if (!window.L && !document.getElementById("iocc-leaflet-js")) {
       const script = document.createElement("script");
@@ -823,9 +840,9 @@ function CrewMap({ height = 300, movements = [] }) {
     return () => clearInterval(t);
   }, []);
 
-  // Stable signature of the moves so the map only rebuilds when they change
+  // Stable signature so the map only rebuilds when the moves change
   // (not on every parent re-render from the 1s header clock tick).
-  const movesSig = movements.map((m) => `${m.crew}:${m.from}>${m.to}`).join("|");
+  const movesSig = movements.map((m) => `${m.crew}:${m.from}>${m.to}:${m.buffer}`).join("|");
 
   useEffect(() => {
     if (!ready || !mapRef.current) return;
@@ -837,12 +854,16 @@ function CrewMap({ height = 300, movements = [] }) {
     L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png", { subdomains: "abcd", maxZoom: 19 }).addTo(map);
     L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png", { subdomains: "abcd", maxZoom: 19, opacity: 0.5 }).addTo(map);
 
-    // Crew movement arrows (deadhead positioning).
+    // How many crew movements converge on each hub (drives the capacity-pressure ring).
+    const converge = {};
+    movements.forEach((m) => { converge[m.to] = (converge[m.to] || 0) + 1; });
+
+    // Animated flowing crew movement arrows, colour-coded by buffer.
     movements.forEach((m, idx) => {
       const from = MAP_AIRPORTS[m.from];
       const to = MAP_AIRPORTS[m.to];
       if (!from || !to) return;
-      const color = m.color || C.amber;
+      const color = bufferColor(m.buffer);
       const steps = 36;
       const dist = Math.hypot(to.lat - from.lat, to.lng - from.lng) || 1;
       const pts = [];
@@ -850,32 +871,63 @@ function CrewMap({ height = 300, movements = [] }) {
         const f = i / steps;
         const lat = from.lat + (to.lat - from.lat) * f;
         const lng = from.lng + (to.lng - from.lng) * f;
-        // Vary the bulge per move so two crew on the same sector don't overlap.
         const b = Math.sin(Math.PI * f) * dist * (0.18 + idx * 0.06);
         pts.push([lat - ((to.lng - from.lng) / dist) * b, lng + ((to.lat - from.lat) / dist) * b]);
       }
-      L.polyline(pts, { color, weight: 2.5, opacity: 0.9, dashArray: "6,5" }).addTo(map);
+      L.polyline(pts, { color, weight: 7, opacity: 0.12 }).addTo(map); // soft glow
+      L.polyline(pts, { color, weight: 2.5, opacity: 0.95, dashArray: "6,6", className: "iocc-flow" }).addTo(map); // flowing dashes
+
       const mi = Math.floor(steps * 0.55);
       const mid = pts[mi];
       const nxt = pts[mi + 1];
       const angle = Math.atan2(nxt[1] - mid[1], nxt[0] - mid[0]) * (180 / Math.PI);
-      const icon = L.divIcon({ className: "", html: `<div style="transform:rotate(${angle}deg);color:${color};font-size:16px;line-height:1;filter:drop-shadow(0 0 3px ${color})">➤</div>`, iconSize: [16, 16], iconAnchor: [8, 8] });
-      const mk = L.marker(mid, { icon, zIndexOffset: 600 }).addTo(map);
-      mk.bindTooltip(m.crew, { permanent: true, direction: "top", offset: [0, -6 - idx * 9], className: "iocc-crew-label" });
+      const arrow = L.divIcon({ className: "", html: `<div style="transform:rotate(${angle}deg);color:${color};font-size:16px;line-height:1;filter:drop-shadow(0 0 3px ${color})">➤</div>`, iconSize: [16, 16], iconAnchor: [8, 8] });
+      const arrowMk = L.marker(mid, { icon: arrow, zIndexOffset: 600, interactive: false }).addTo(map);
+      const card = `<div style="padding:6px 8px;border-left:3px solid ${color};min-width:128px">
+        <div style="font-size:11px;font-weight:700;color:${C.text}">${m.crew}</div>
+        <div style="font-size:9px;color:${C.textMuted}">${m.role}</div>
+        <div style="font-size:9px;color:${C.textDim};font-family:monospace;margin-top:3px">${m.from}→${m.to} · dep ${m.dep} → arr ${m.arr}</div>
+        <div style="font-size:9px;color:${color};font-weight:700;margin-top:2px">cover ${m.flight} · ${m.buffer}m buffer</div>
+      </div>`;
+      arrowMk.bindTooltip(card, { permanent: true, direction: "top", offset: [0, -8 - idx * 6], className: "iocc-crew-card", interactive: false });
+
+      // Flight tag at the destination showing the flight being recovered.
+      const tag = L.divIcon({ className: "", html: `<div class="iocc-flighttag" style="color:${color};border:1px solid ${color}">✈ ${m.flight}</div>`, iconSize: [1, 1], iconAnchor: [-9, 4 + idx * 16] });
+      L.marker([to.lat, to.lng], { icon: tag, interactive: false, zIndexOffset: 400 }).addTo(map);
     });
 
-    // Base markers (DEL/BOM/BLR/HYD/MAA), highlighted if part of a move.
+    // Hub markers with a capacity-pressure ring + clickable crew-availability popup.
     Object.entries(MAP_AIRPORTS).forEach(([code, ap]) => {
+      const arrivals = converge[code] || 0;
       const involved = movements.some((m) => m.from === code || m.to === code);
-      const color = involved ? C.cyan : C.borderBright;
-      const icon = L.divIcon({ className: "", html: `<div style="position:relative;width:18px;height:18px"><div style="position:absolute;top:5px;left:5px;width:8px;height:8px;border-radius:50%;background:${C.bg};border:2px solid ${color};box-shadow:0 0 6px ${color}"></div></div>`, iconSize: [18, 18], iconAnchor: [9, 9] });
+      const frac = Math.min(arrivals, 3) / 3;
+      const deg = Math.round(frac * 360);
+      const pColor = arrivals >= 3 ? C.red : arrivals === 2 ? C.amber : arrivals === 1 ? C.green : C.borderBright;
+      const ringBg = arrivals > 0 ? `conic-gradient(${pColor} ${deg}deg, ${C.border} ${deg}deg)` : C.border;
+      const dotColor = involved ? C.cyan : C.borderBright;
+      const html = `<div style="width:26px;height:26px;border-radius:50%;background:${ringBg};display:flex;align-items:center;justify-content:center;box-shadow:0 0 8px ${arrivals > 0 ? pColor : "transparent"}">
+        <div style="width:18px;height:18px;border-radius:50%;background:${C.bg};display:flex;align-items:center;justify-content:center">
+          <div style="width:8px;height:8px;border-radius:50%;background:${dotColor};box-shadow:0 0 6px ${dotColor}"></div>
+        </div></div>`;
+      const icon = L.divIcon({ className: "", html, iconSize: [26, 26], iconAnchor: [13, 13] });
       const mk = L.marker([ap.lat, ap.lng], { icon }).addTo(map);
       const dir = code === "BLR" ? "left" : "right";
-      mk.bindTooltip(code, { permanent: true, direction: dir, offset: dir === "left" ? [-8, 0] : [8, 0], className: "iocc-airport-label" });
+      mk.bindTooltip(code, { permanent: true, direction: dir, offset: dir === "left" ? [-13, 0] : [13, 0], className: "iocc-airport-label" });
+
+      const hubReserves = reserves.filter((r) => r.base === code);
+      const rows = hubReserves.length
+        ? hubReserves.map((r) => {
+            const sc = r.status === "Available" ? C.green : r.status === "Positioning" ? C.cyan : C.amber;
+            return `<div style="display:flex;justify-content:space-between;gap:12px;font-size:11px;margin:3px 0"><span style="color:${C.text}">${r.name}</span><span style="color:${sc}">${r.status}</span></div>`;
+          }).join("")
+        : `<div style="font-size:11px;color:${C.textMuted}">No reserves based here</div>`;
+      const pressLabel = arrivals >= 3 ? "high pressure" : arrivals === 2 ? "moderate pressure" : arrivals === 1 ? "low pressure" : "no inbound pressure";
+      const pressLine = arrivals > 0 ? `${arrivals} crew movement${arrivals === 1 ? "" : "s"} converging · ${pressLabel}` : "No inbound crew movements";
+      mk.bindPopup(`<div style="min-width:184px"><div style="color:${C.cyan};font-weight:700;font-size:13px;margin-bottom:6px">${code} — Reserve Crew</div>${rows}<div style="font-size:10px;color:${arrivals > 0 ? pColor : C.textMuted};margin-top:8px;border-top:1px solid ${C.border};padding-top:6px">${pressLine}</div></div>`, { className: "iocc-hub-popup" });
     });
 
     const bounds = L.latLngBounds(Object.values(MAP_AIRPORTS).map((a) => [a.lat, a.lng]));
-    map.fitBounds(bounds, { paddingTopLeft: [30, 24], paddingBottomRight: [44, 30] });
+    map.fitBounds(bounds, { paddingTopLeft: [44, 44], paddingBottomRight: [52, 32] });
 
     return () => { if (instanceRef.current) { instanceRef.current.remove(); instanceRef.current = null; } };
   }, [ready, movesSig]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -919,18 +971,18 @@ function CrewRecovery() {
         { crew: "FO N. Menon", base: "BLR", flight: "FL-241 BLR→BOM", move: "Local — at BLR" },
       ],
       movements: [
-        { crew: "FO R. Nair", from: "HYD", to: "BLR", color: C.green },
+        { crew: "FO R. Nair", role: "First Officer", from: "HYD", to: "BLR", flight: "FL-233", dep: "18:05", arr: "19:20", buffer: 55 },
       ],
       timeline: [
-        { flight: "FL-233 BLR→DEL", dep: 35, ready: 18 },
-        { flight: "FL-207 DEL→HYD", dep: 95, ready: 30 },
-        { flight: "FL-219 DEL→CCU", dep: 140, ready: 45 },
-        { flight: "FL-241 BLR→BOM", dep: 205, ready: 70 },
+        { flight: "FL-233 BLR→DEL", dep: 150, ready: 95 },
+        { flight: "FL-207 DEL→HYD", dep: 180, ready: 30 },
+        { flight: "FL-219 DEL→CCU", dep: 210, ready: 35 },
+        { flight: "FL-241 BLR→BOM", dep: 260, ready: 40 },
       ],
     },
     {
       rank: 2, label: "Balanced Positioning", confidence: 87, cost: "₹4.2L", color: C.amber,
-      detail: "Two deadhead positionings (BOM→DEL and HYD→BLR) spread the fatigue load across bases. Adds positioning cost and a second tight crew-in-position window.",
+      detail: "Two deadhead positionings (BOM→DEL and HYD→BLR) spread the fatigue load across bases. Adds positioning cost and two tight crew-in-position windows.",
       assignments: [
         { crew: "Capt A. Verma", base: "DEL", flight: "FL-207 DEL→HYD", move: "Local — at DEL" },
         { crew: "FO K. Pillai", base: "BOM", flight: "FL-219 DEL→CCU", move: "Deadhead BOM→DEL" },
@@ -938,14 +990,14 @@ function CrewRecovery() {
         { crew: "FO N. Menon", base: "BLR", flight: "FL-241 BLR→BOM", move: "Local — at BLR" },
       ],
       movements: [
-        { crew: "FO K. Pillai", from: "BOM", to: "DEL", color: C.amber },
-        { crew: "FO R. Nair", from: "HYD", to: "BLR", color: C.amber },
+        { crew: "FO K. Pillai", role: "First Officer", from: "BOM", to: "DEL", flight: "FL-219", dep: "19:10", arr: "21:00", buffer: 25 },
+        { crew: "FO R. Nair", role: "First Officer", from: "HYD", to: "BLR", flight: "FL-233", dep: "18:32", arr: "19:47", buffer: 28 },
       ],
       timeline: [
-        { flight: "FL-233 BLR→DEL", dep: 35, ready: 18 },
-        { flight: "FL-207 DEL→HYD", dep: 95, ready: 30 },
-        { flight: "FL-219 DEL→CCU", dep: 140, ready: 118 },
-        { flight: "FL-241 BLR→BOM", dep: 205, ready: 70 },
+        { flight: "FL-233 BLR→DEL", dep: 150, ready: 122 },
+        { flight: "FL-207 DEL→HYD", dep: 180, ready: 30 },
+        { flight: "FL-219 DEL→CCU", dep: 210, ready: 185 },
+        { flight: "FL-241 BLR→BOM", dep: 260, ready: 40 },
       ],
     },
     {
@@ -958,15 +1010,15 @@ function CrewRecovery() {
         { crew: "Capt D. Banerjee", base: "BLR", flight: "FL-241 BLR→BOM", move: "Standby callout — BLR" },
       ],
       movements: [
-        { crew: "Capt V. Rao", from: "BOM", to: "DEL", color: C.amber },
-        { crew: "FO K. Pillai", from: "BOM", to: "DEL", color: C.amber },
-        { crew: "FO R. Nair", from: "HYD", to: "BLR", color: C.amber },
+        { crew: "Capt V. Rao", role: "Captain", from: "BOM", to: "DEL", flight: "FL-207", dep: "18:38", arr: "20:28", buffer: 12 },
+        { crew: "FO K. Pillai", role: "First Officer", from: "BOM", to: "DEL", flight: "FL-219", dep: "19:20", arr: "21:10", buffer: 15 },
+        { crew: "FO R. Nair", role: "First Officer", from: "HYD", to: "BLR", flight: "FL-233", dep: "18:45", arr: "20:00", buffer: 15 },
       ],
       timeline: [
-        { flight: "FL-233 BLR→DEL", dep: 35, ready: 22 },
-        { flight: "FL-207 DEL→HYD", dep: 95, ready: 78 },
-        { flight: "FL-219 DEL→CCU", dep: 140, ready: 115 },
-        { flight: "FL-241 BLR→BOM", dep: 205, ready: 150 },
+        { flight: "FL-233 BLR→DEL", dep: 150, ready: 135 },
+        { flight: "FL-207 DEL→HYD", dep: 180, ready: 168 },
+        { flight: "FL-219 DEL→CCU", dep: 210, ready: 195 },
+        { flight: "FL-241 BLR→BOM", dep: 260, ready: 60 },
       ],
     },
   ];
@@ -1131,12 +1183,21 @@ function CrewRecovery() {
             {opt.movements.length ? `${opt.movements.length} deadhead positioning move${opt.movements.length > 1 ? "s" : ""}` : "No positioning required — reserves already at base"}
           </div>
         </div>
-        <CrewMap movements={opt.movements} />
-        {opt.movements.length > 0 && (
-          <div style={{ display: "flex", gap: 16, marginTop: 8, flexWrap: "wrap" }}>
-            {opt.movements.map((m, i) => <span key={i} style={{ fontSize: 10, color: C.amber }}>➤ {m.crew}: {m.from} → {m.to} (deadhead)</span>)}
+        <CrewMap movements={opt.movements} reserves={reserves} />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, marginTop: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+            {opt.movements.map((m, i) => {
+              const col = bufferColor(m.buffer);
+              return <span key={i} style={{ fontSize: 10, color: col }}>➤ {m.crew} ({m.role}) {m.from}→{m.to} · {m.flight} · {m.buffer}m buffer</span>;
+            })}
           </div>
-        )}
+          <div style={{ display: "flex", gap: 12, fontSize: 10 }}>
+            <span style={{ color: C.green }}>● &gt;40m</span>
+            <span style={{ color: C.amber }}>● 20–40m</span>
+            <span style={{ color: C.red }}>● &lt;20m</span>
+            <span style={{ color: C.textMuted }}>◍ hub pressure · click hub for crew</span>
+          </div>
+        </div>
       </div>
 
       {/* Crew Recovery Timeline */}
@@ -1146,7 +1207,9 @@ function CrewRecovery() {
           <div style={{ display: "flex", gap: 14, fontSize: 10 }}>
             <span style={{ color: C.cyan }}>◆ Crew in position</span>
             <span style={{ color: C.text }}>✈ Flight departs</span>
-            <span style={{ color: C.amber }}>▬ &lt;30 min buffer</span>
+            <span style={{ color: C.green }}>▬ buffer</span>
+            <span style={{ color: C.amber }}>&lt;40m</span>
+            <span style={{ color: C.red }}>&lt;20m</span>
           </div>
         </div>
         {/* axis */}
@@ -1160,21 +1223,22 @@ function CrewRecovery() {
         </div>
         {opt.timeline.map((row, i) => {
           const buffer = row.dep - row.ready;
-          const tight = buffer < 30;
+          const tight = buffer < 40;
+          const col = bufferColor(buffer);
           return (
             <div key={i} style={{ display: "flex", alignItems: "center", margin: "10px 0" }}>
               <div style={{ width: 150, fontSize: 12, fontFamily: "monospace", color: C.text }}>{row.flight}</div>
               <div style={{ position: "relative", flex: 1, height: 26, background: C.bg, borderRadius: 4, border: `1px solid ${C.border}` }}>
-                <div style={{ position: "absolute", left: pct(row.ready), width: `${(buffer / 360) * 100}%`, top: 8, height: 10, background: tight ? C.amber : C.green, opacity: 0.6, borderRadius: 5 }} />
+                <div style={{ position: "absolute", left: pct(row.ready), width: `${(buffer / 360) * 100}%`, top: 8, height: 10, background: col, opacity: 0.65, borderRadius: 5 }} />
                 <div style={{ position: "absolute", left: pct(row.ready), top: 5, transform: "translateX(-50%)", color: C.cyan, fontSize: 13 }}>◆</div>
                 <div style={{ position: "absolute", left: pct(row.dep), top: 4, transform: "translateX(-50%)", fontSize: 13 }}>✈</div>
-                <span style={{ position: "absolute", left: pct((row.ready + row.dep) / 2), top: -13, transform: "translateX(-50%)", fontSize: 9, color: tight ? C.amber : C.textMuted, whiteSpace: "nowrap", fontWeight: tight ? 700 : 400 }}>{tight ? `⚠ ${buffer}m buffer` : `${buffer}m buffer`}</span>
+                <span style={{ position: "absolute", left: pct((row.ready + row.dep) / 2), top: -13, transform: "translateX(-50%)", fontSize: 9, color: tight ? col : C.textMuted, whiteSpace: "nowrap", fontWeight: tight ? 700 : 400 }}>{tight ? `⚠ ${buffer}m buffer` : `${buffer}m buffer`}</span>
               </div>
             </div>
           );
         })}
-        {opt.timeline.some((r) => r.dep - r.ready < 30) && (
-          <div style={{ marginTop: 10, fontSize: 11, color: C.amber }}>⚠ Amber windows have under 30 minutes of crew-in-position buffer — monitor closely; any further slip risks an FDTL breach.</div>
+        {opt.timeline.some((r) => r.dep - r.ready < 40) && (
+          <div style={{ marginTop: 10, fontSize: 11, color: C.amber }}>⚠ Amber/red windows have under 40 minutes of crew-in-position buffer — monitor closely; any further slip risks an FDTL breach.</div>
         )}
       </div>
     </div>

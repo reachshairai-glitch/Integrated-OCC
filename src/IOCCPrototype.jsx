@@ -122,13 +122,13 @@ function Metric({ label, value, unit, status, delta, glow, live }) {
   const glowClass = glow === "red" ? "iocc-glow-red" : glow === "amber" ? "iocc-glow-amber" : undefined;
   return (
     <div className={glowClass}
-      style={{ background: C.surface, border: `1px solid ${glowColor || C.border}`, borderRadius: 8, padding: "16px 20px", flex: 1, minWidth: 140, transition: "border-color 0.4s" }}>
-      <div style={{ fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
-        <span style={{ flex: 1 }}>{label}</span>
+      style={{ background: C.surface, border: `1px solid ${glowColor || C.border}`, borderRadius: 8, padding: "12px 14px", flex: 1, minWidth: 0, transition: "border-color 0.4s" }}>
+      <div style={{ fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+        <span style={{ flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
         {live && <span className="iocc-live-dot" style={{ width: 6, height: 6, borderRadius: "50%", background: C.green, display: "inline-block", boxShadow: `0 0 5px ${C.green}`, flexShrink: 0 }} />}
       </div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
-        <span style={{ fontSize: 28, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", color: statusColor, transition: "color 0.3s" }}>{value}</span>
+        <span style={{ fontSize: 24, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", color: statusColor, transition: "color 0.3s" }}>{value}</span>
         {unit && <span style={{ fontSize: 13, color: C.textMuted }}>{unit}</span>}
       </div>
       {delta && <div style={{ fontSize: 11, color: delta.startsWith("+") ? C.red : C.green, marginTop: 4 }}>{delta} vs yesterday</div>}
@@ -309,18 +309,19 @@ const ALERT_POOL = [
 ];
 
 // Flights-airborne baseline by IST hour — realistic daily ops curve.
-// Low overnight, climbs to a 10:00–14:00 peak (~220), mid-afternoon dip,
-// a second 18:00–20:00 peak, then drops sharply after 22:00 to near zero.
+// 0–5: 0→40 slow climb · 5–9: 40→190 morning wave · 9–14: 190–220 midday peak
+// · 14–17: ~160–180 afternoon lull · 17–21: 195–210 evening peak
+// · 21–23: 180→80 · 23–24: 80→near zero.
 const AIRBORNE_CURVE = [
-  [0, 8], [3, 4], [5, 18], [6, 55], [7, 110], [8, 155], [9, 185],
-  [10, 210], [11, 218], [12, 220], [13, 218], [14, 212],
-  [15, 196], [16, 184], [17, 194], [18, 208], [19, 216], [20, 209],
-  [21, 172], [22, 108], [23, 46], [24, 8],
+  [0, 5], [5, 40], [7, 120], [9, 190], [11, 215], [12, 220], [14, 205],
+  [15, 178], [16, 166], [17, 172], [18, 195], [19, 205], [20, 210],
+  [21, 180], [23, 80], [24, 4],
 ];
 
 function airborneBaseline(d = new Date()) {
-  const [hh, mm] = d.toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour12: false, hour: "2-digit", minute: "2-digit" }).split(":").map(Number);
-  const t = hh + mm / 60;
+  // Always derive the hour from IST (UTC + 5:30), not the browser's local zone.
+  const ist = new Date(d.getTime() + 5.5 * 3600000);
+  const t = ist.getUTCHours() + ist.getUTCMinutes() / 60;
   for (let i = 0; i < AIRBORNE_CURVE.length - 1; i++) {
     const [h0, v0] = AIRBORNE_CURVE[i];
     const [h1, v1] = AIRBORNE_CURVE[i + 1];
@@ -329,9 +330,9 @@ function airborneBaseline(d = new Date()) {
   return AIRBORNE_CURVE[AIRBORNE_CURVE.length - 1][1];
 }
 
-// Curve value for the current moment plus a small ±5 jitter so it looks live.
+// Curve value for the current moment plus a small ±8 jitter so it looks live.
 function airborneNow(d = new Date()) {
-  return Math.max(0, Math.round(airborneBaseline(d) + (Math.random() * 10 - 5)));
+  return Math.max(0, Math.round(airborneBaseline(d) + (Math.random() * 16 - 8)));
 }
 
 // Shared keyframes: IROP badge pulse, blinking live dots, alert slide-in, risk glow.
@@ -419,13 +420,13 @@ function Dashboard() {
       />
 
       {/* KPI Row */}
-      <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-        <Metric label="On-Time Performance" value={kpi.otp.toFixed(1)} unit="%" status={kpi.otp >= 85 ? "good" : "warn"} delta="+1.2%" live />
-        <Metric label="Flights Airborne Now" value={kpi.airborne} status="good" live />
+      <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "nowrap" }}>
+        <Metric label="OTP" value={kpi.otp.toFixed(1)} unit="%" status={kpi.otp >= 85 ? "good" : "warn"} delta="+1.2%" live />
+        <Metric label="Airborne Now" value={kpi.airborne} status="good" live />
         <Metric label="Flights Today" value={kpi.flightsToday.toLocaleString("en-IN")} status="good" live />
         <Metric label="Cancellations" value={kpi.cancellations} status={kpi.cancellations > 5 ? "warn" : "good"} delta="+2" live />
-        <Metric label="Crew Availability" value={kpi.crew.toFixed(1)} unit="%" status="warn" delta="-2.3%" live />
-        <Metric label="Disruption Risk Index" value={kpi.risk} unit="/100" status={kpi.risk > 50 ? "bad" : "warn"} glow={kpi.risk > 50 ? "red" : kpi.risk > 40 ? "amber" : null} live />
+        <Metric label="Crew Avail" value={kpi.crew.toFixed(1)} unit="%" status="warn" delta="-2.3%" live />
+        <Metric label="Risk Index" value={kpi.risk} unit="/100" status={kpi.risk > 50 ? "bad" : "warn"} glow={kpi.risk > 50 ? "red" : kpi.risk > 40 ? "amber" : null} live />
         <Metric label="Pax Impacted" value={kpi.pax.toLocaleString("en-IN")} status="warn" delta="+320" live />
       </div>
 

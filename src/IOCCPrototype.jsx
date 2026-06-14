@@ -1450,6 +1450,268 @@ function AIAssistant() {
   );
 }
 
+// ── SYSTEM ARCHITECTURE DATA ────────────────────────────────────
+const catColor = { "Flight Ops": "#3B82F6", "Weather": "#06B6D4", "Regulatory": "#F59E0B", "Ground": "#10B981" };
+
+const SA_SOURCES = [
+  { name: "Sabre GDS", icon: "✈", cat: "Flight Ops", carries: "Flight schedules + booking data", freq: "streaming · ~2s" },
+  { name: "Amadeus Altéa", icon: "✈", cat: "Flight Ops", carries: "PNR + seat inventory", freq: "streaming · ~2s" },
+  { name: "Thales FMS", icon: "🛰", cat: "Flight Ops", carries: "Aircraft FMS telemetry", freq: "streaming · 1s" },
+  { name: "IMD Weather", icon: "☁", cat: "Weather", carries: "METAR / TAF weather updates", freq: "every 60s" },
+  { name: "DGCA Reg. DB", icon: "⚖", cat: "Regulatory", carries: "FDTL regulatory updates", freq: "daily · 00:00 IST" },
+  { name: "AAI Ground Ops", icon: "🧳", cat: "Ground", carries: "Stand / turnaround status", freq: "every 30s" },
+];
+
+const SA_ENGINES = [
+  { lines: ["Disruption", "Prediction"], name: "AI Disruption Prediction Engine", does: "Forecasts network disruption risk 72–96 hours ahead.", consumes: "Weather (METAR/TAF), crew duty state, schedules, historical patterns", outputs: "Risk scores + cancellation probability distribution", tech: "Python ML · Monte Carlo (10,000 runs)" },
+  { lines: ["Operations", "Digital Twin"], name: "Operations Digital Twin", does: "Maintains a live, simulatable model of the entire network state.", consumes: "Real-time flight, aircraft & crew positions from the Event Hub", outputs: "What-if scenario states + delay-propagation modelling", tech: "Python simulation · graph state model" },
+  { lines: ["IROP", "Recovery"], name: "IROP Recovery Engine", does: "Generates ranked, FDTL-compliant recovery plans for disruptions.", consumes: "Risk scores, crew legality, aircraft availability", outputs: "Ranked recovery options with cost & confidence", tech: "Optimisation solver · Claude API for narrative" },
+  { lines: ["Pax & Bag", "Recovery"], name: "Passenger & Baggage Recovery", does: "Automatically re-books passengers and reroutes baggage.", consumes: "Disruption events, PNR/inventory, baggage tag scans", outputs: "Rebooking instructions + bag reroute plans", tech: "Rules engine · Python · Claude for comms" },
+  { lines: ["Fatigue Risk", "Management"], name: "Fatigue Risk Management System", does: "Tracks FDTL Phase II duty/rest and forecasts crew availability.", consumes: "Rosters, duty logs, DGCA FDTL rules", outputs: "Crew-at-risk alerts + legality checks", tech: "Python ML forecasting · rules engine" },
+];
+
+const SA_OUTPUTS = [
+  { lines: ["OCC Controller", "Dashboard"] },
+  { lines: ["Crew Control", "Console"] },
+  { lines: ["Passenger", "Notification"] },
+  { lines: ["Baggage", "Recovery"] },
+  { lines: ["Executive", "Reporting"] },
+];
+
+const SA_TECH = [
+  { t: "Azure Event Hubs", d: "Stream ingestion", c: "#F59E0B" },
+  { t: "Python + TensorFlow", d: "ML models", c: "#10B981" },
+  { t: "Claude API", d: "Generative AI", c: "#06B6D4" },
+  { t: "React", d: "Frontend", c: "#3B82F6" },
+  { t: "PostgreSQL", d: "Operational data", c: "#3B82F6" },
+  { t: "Redis", d: "Real-time cache", c: "#EF4444" },
+];
+
+// engine → output edges with flow tooltips
+const SA_ENG_OUT = [
+  { e: 0, o: 0, title: "Risk index + forecast", sub: "Disruption Prediction → OCC Dashboard · continuous" },
+  { e: 0, o: 4, title: "Risk trends", sub: "Disruption Prediction → Executive Reporting · hourly" },
+  { e: 1, o: 0, title: "Network state + what-if", sub: "Digital Twin → OCC Dashboard · continuous" },
+  { e: 2, o: 0, title: "Recovery options", sub: "IROP Recovery → OCC Dashboard · on event" },
+  { e: 2, o: 1, title: "Crew swap instructions", sub: "IROP Recovery → Crew Control Console · on approval" },
+  { e: 3, o: 2, title: "Rebooking + comms", sub: "Pax & Bag Recovery → Passenger Notification · on event" },
+  { e: 3, o: 3, title: "Bag reroute plan", sub: "Pax & Bag Recovery → Baggage Recovery System · on event" },
+  { e: 4, o: 1, title: "Crew duty alerts", sub: "Fatigue Risk Mgmt → Crew Control Console · continuous" },
+];
+
+// inter-engine edges (shared data)
+const SA_INTER = [
+  { a: 1, b: 0, title: "Live network state", sub: "Digital Twin → Disruption Prediction · continuous" },
+  { a: 0, b: 2, title: "Risk scores", sub: "Disruption Prediction → IROP Recovery · on threshold breach" },
+  { a: 4, b: 2, title: "Crew legality", sub: "Fatigue Risk Mgmt → IROP Recovery · continuous" },
+  { a: 0, b: 3, title: "Predicted impact", sub: "Disruption Prediction → Pax & Bag Recovery · continuous" },
+];
+
+// ── SCREEN: SYSTEM ARCHITECTURE ─────────────────────────────────
+function SystemArchitecture() {
+  const [zoom, setZoom] = useState(1);
+  const [engine, setEngine] = useState(null);
+  const [tip, setTip] = useState(null);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    if (document.getElementById("iocc-arch-style")) return;
+    const s = document.createElement("style");
+    s.id = "iocc-arch-style";
+    s.textContent = `
+      @keyframes ioccDashFlow { to { stroke-dashoffset: -16; } }
+      .iocc-flowline { stroke-dasharray: 5 7; animation: ioccDashFlow 0.7s linear infinite; pointer-events: none; }
+      .iocc-arch-node { transition: filter 0.15s; }
+      .iocc-arch-node:hover { filter: brightness(1.4); }
+      .iocc-arch-engine { cursor: pointer; }
+      .iocc-arch-edge { cursor: help; }
+      .iocc-arch-edge:hover .iocc-flowline { stroke-width: 3.2 !important; opacity: 1 !important; }
+    `;
+    document.head.appendChild(s);
+  }, []);
+
+  const W = 1180, H = 660;
+  const gx0 = 120, gW = 812;
+  const xs = (n, bw) => { const gap = (gW - n * bw) / (n - 1); return Array.from({ length: n }, (_, i) => gx0 + i * (bw + gap)); };
+  const srcBW = 118, srcH = 56, srcY = 52, srcX = xs(6, srcBW);
+  const hubX = gx0, hubW = gW, hubY = 200, hubH = 56;
+  const engBW = 150, engH = 86, engY = 350, engX = xs(5, engBW);
+  const outBW = 150, outH = 56, outY = 560, outX = xs(5, outBW);
+  const cx = (x, bw) => x + bw / 2;
+
+  const move = (e) => { const r = wrapRef.current?.getBoundingClientRect(); if (r) setPos({ x: e.clientX - r.left, y: e.clientY - r.top }); };
+  const edgeProps = (title, sub) => ({ className: "iocc-arch-edge", onMouseEnter: () => setTip({ title, sub }), onMouseLeave: () => setTip(null) });
+
+  const Line = ({ x1, y1, x2, y2, color }) => (
+    <>
+      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth={12} />
+      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={color} strokeWidth={1.4} opacity={0.8} className="iocc-flowline" />
+    </>
+  );
+  const Arc = ({ d, color }) => (
+    <>
+      <path d={d} fill="none" stroke="transparent" strokeWidth={12} />
+      <path d={d} fill="none" stroke={color} strokeWidth={1.4} opacity={0.8} className="iocc-flowline" />
+    </>
+  );
+
+  const bands = [
+    { label: "DATA SOURCES", color: C.blue, y: 44, h: 76 },
+    { label: "INTEGRATION", color: C.amber, y: 192, h: 72 },
+    { label: "INTELLIGENCE", color: C.green, y: 338, h: 112 },
+    { label: "OUTPUT", color: C.cyan, y: 552, h: 74 },
+  ];
+
+  return (
+    <div>
+      <SectionHeader
+        title="System Architecture"
+        sub="End-to-end data flow  ·  four-layer enterprise blueprint  ·  click an engine for detail, hover any line for the data it carries"
+        badge={<AlertBadge level="ok" text="ENTERPRISE BLUEPRINT" />}
+      />
+
+      {/* Summary metrics */}
+      <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+        <Metric label="Data Latency" value="<2" unit="s end-to-end" status="good" />
+        <Metric label="System Availability" value="99.97" unit="% uptime target" status="good" />
+        <Metric label="Scenarios Modelled" value="10,000" unit="MC runs / cycle" />
+      </div>
+
+      {/* Toolbar */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <span style={{ fontSize: 11, color: C.textMuted }}>Interactive SVG · zoom and explore</span>
+        <div style={{ display: "flex", gap: 6 }}>
+          {[["−", () => setZoom(z => Math.max(0.6, +(z - 0.2).toFixed(2)))], ["Reset", () => setZoom(1)], ["+", () => setZoom(z => Math.min(2, +(z + 0.2).toFixed(2)))]].map(([t, fn], i) => (
+            <button key={i} onClick={fn} style={{ background: C.surfaceHigh, color: C.textDim, border: `1px solid ${C.border}`, borderRadius: 5, padding: "4px 12px", fontSize: 12, cursor: "pointer", fontFamily: "monospace" }}>{t}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Diagram */}
+      <div ref={wrapRef} onMouseMove={move} style={{ position: "relative", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "auto", maxHeight: "72vh" }}>
+        <svg width={W * zoom} height={H * zoom} viewBox={`0 0 ${W} ${H}`} style={{ display: "block" }}>
+          {/* layer bands + labels */}
+          {bands.map((b, i) => (
+            <g key={i}>
+              <rect x={24} y={b.y} width={912} height={b.h} rx={8} fill={b.color} fillOpacity={0.05} stroke={b.color} strokeOpacity={0.2} />
+              <text x={58} y={b.y + b.h / 2} fill={b.color} fontSize={10} fontWeight={700} fontFamily="monospace" textAnchor="middle" transform={`rotate(-90 58 ${b.y + b.h / 2})`} letterSpacing={2}>{b.label}</text>
+            </g>
+          ))}
+
+          {/* ── edges (drawn under boxes) ── */}
+          {/* sources → hub */}
+          {srcX.map((x, i) => (
+            <g key={`s${i}`} {...edgeProps(SA_SOURCES[i].carries, `${SA_SOURCES[i].name} · ${SA_SOURCES[i].freq}`)}>
+              <Line x1={cx(x, srcBW)} y1={srcY + srcH} x2={cx(x, srcBW)} y2={hubY} color={catColor[SA_SOURCES[i].cat]} />
+            </g>
+          ))}
+          {/* hub → engines */}
+          {engX.map((x, i) => (
+            <g key={`he${i}`} {...edgeProps("Normalised event stream", `Azure Event Hub → ${SA_ENGINES[i].lines.join(" ")} · continuous`)}>
+              <Line x1={cx(x, engBW)} y1={hubY + hubH} x2={cx(x, engBW)} y2={engY} color={C.amber} />
+            </g>
+          ))}
+          {/* inter-engine */}
+          {SA_INTER.map((m, i) => {
+            const xa = cx(engX[m.a], engBW), xb = cx(engX[m.b], engBW);
+            const rise = engY - 14 - Math.abs(m.a - m.b) * 12;
+            const d = `M ${xa} ${engY} C ${xa} ${rise}, ${xb} ${rise}, ${xb} ${engY}`;
+            return <g key={`i${i}`} {...edgeProps(m.title, m.sub)}><Arc d={d} color={C.green} /></g>;
+          })}
+          {/* engines → outputs */}
+          {SA_ENG_OUT.map((m, i) => (
+            <g key={`eo${i}`} {...edgeProps(m.title, m.sub)}>
+              <Line x1={cx(engX[m.e], engBW)} y1={engY + engH} x2={cx(outX[m.o], outBW)} y2={outY} color={C.cyan} />
+            </g>
+          ))}
+
+          {/* ── nodes ── */}
+          {/* sources */}
+          {SA_SOURCES.map((s, i) => (
+            <g key={`src${i}`} className="iocc-arch-node">
+              <rect x={srcX[i]} y={srcY} width={srcBW} height={srcH} rx={6} fill={C.blue} fillOpacity={0.13} stroke={C.blue} strokeWidth={1.4} />
+              <text x={srcX[i] + 12} y={srcY + 23} fontSize={15}>{s.icon}</text>
+              <text x={cx(srcX[i], srcBW)} y={srcY + 28} textAnchor="middle" fontSize={9.5} fontFamily="monospace" fontWeight={700} fill={C.text}>{s.name}</text>
+              <text x={cx(srcX[i], srcBW)} y={srcY + 44} textAnchor="middle" fontSize={7.5} fontFamily="monospace" fill={catColor[s.cat]} letterSpacing={0.5}>{s.cat.toUpperCase()}</text>
+            </g>
+          ))}
+          {/* event hub */}
+          <g className="iocc-arch-node">
+            <rect x={hubX} y={hubY} width={hubW} height={hubH} rx={7} fill={C.amber} fillOpacity={0.14} stroke={C.amber} strokeWidth={1.8} />
+            <text x={cx(hubX, hubW)} y={hubY + 26} textAnchor="middle" fontSize={15} fontWeight={700} fill={C.amber} fontFamily="monospace">⚡ Azure Event Hub</text>
+            <text x={cx(hubX, hubW)} y={hubY + 43} textAnchor="middle" fontSize={9} fill={C.textDim} fontFamily="monospace">real-time event streaming backbone · unified ingestion across all sources</text>
+          </g>
+          {/* engines */}
+          {SA_ENGINES.map((eng, i) => {
+            const sel = engine === i;
+            return (
+              <g key={`eng${i}`} className="iocc-arch-node iocc-arch-engine" onClick={() => setEngine(sel ? null : i)}>
+                <rect x={engX[i]} y={engY} width={engBW} height={engH} rx={7} fill={C.green} fillOpacity={sel ? 0.28 : 0.13} stroke={C.green} strokeWidth={sel ? 2.6 : 1.6} />
+                <text x={cx(engX[i], engBW)} y={engY + 34} textAnchor="middle" fontSize={12} fontWeight={700} fill={C.text} fontFamily="monospace">{eng.lines[0]}</text>
+                <text x={cx(engX[i], engBW)} y={engY + 50} textAnchor="middle" fontSize={12} fontWeight={700} fill={C.text} fontFamily="monospace">{eng.lines[1]}</text>
+                <text x={cx(engX[i], engBW)} y={engY + 70} textAnchor="middle" fontSize={7.5} fill={C.green} fontFamily="monospace" letterSpacing={0.5}>{sel ? "▾ HIDE DETAIL" : "▸ CLICK FOR DETAIL"}</text>
+              </g>
+            );
+          })}
+          {/* outputs */}
+          {SA_OUTPUTS.map((o, i) => (
+            <g key={`out${i}`} className="iocc-arch-node">
+              <rect x={outX[i]} y={outY} width={outBW} height={outH} rx={6} fill={C.cyan} fillOpacity={0.12} stroke={C.cyan} strokeWidth={1.4} />
+              <text x={cx(outX[i], outBW)} y={outY + 25} textAnchor="middle" fontSize={10.5} fontWeight={700} fill={C.text} fontFamily="monospace">{o.lines[0]}</text>
+              <text x={cx(outX[i], outBW)} y={outY + 40} textAnchor="middle" fontSize={10.5} fontWeight={700} fill={C.text} fontFamily="monospace">{o.lines[1]}</text>
+            </g>
+          ))}
+
+          {/* tech stack panel */}
+          <g>
+            <rect x={955} y={44} width={200} height={582} rx={8} fill={C.surface} stroke={C.border} />
+            <text x={1055} y={70} textAnchor="middle" fontSize={11} fontWeight={700} fill={C.textDim} fontFamily="monospace" letterSpacing={1}>TECHNOLOGY STACK</text>
+            {SA_TECH.map((tk, i) => {
+              const ry = 90 + i * 86;
+              return (
+                <g key={`t${i}`} className="iocc-arch-node">
+                  <rect x={970} y={ry} width={170} height={70} rx={6} fill={C.surfaceHigh} stroke={tk.c} strokeOpacity={0.5} />
+                  <rect x={970} y={ry} width={4} height={70} rx={2} fill={tk.c} />
+                  <text x={984} y={ry + 30} fontSize={11.5} fontWeight={700} fill={C.text} fontFamily="monospace">{tk.t}</text>
+                  <text x={984} y={ry + 48} fontSize={9} fill={C.textMuted} fontFamily="monospace">{tk.d}</text>
+                </g>
+              );
+            })}
+          </g>
+        </svg>
+
+        {/* hover tooltip */}
+        {tip && (
+          <div style={{ position: "absolute", left: pos.x + 14, top: pos.y + 14, pointerEvents: "none", background: C.surfaceHigh, border: `1px solid ${C.borderBright}`, borderRadius: 6, padding: "7px 10px", maxWidth: 240, boxShadow: "0 2px 12px rgba(0,0,0,0.5)", zIndex: 5 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.text }}>{tip.title}</div>
+            <div style={{ fontSize: 10, color: C.textDim, fontFamily: "monospace", marginTop: 3 }}>{tip.sub}</div>
+          </div>
+        )}
+      </div>
+
+      {/* engine detail panel */}
+      {engine !== null && (
+        <div style={{ background: C.surface, border: `1px solid ${C.green}`, borderRadius: 8, padding: 20, marginTop: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.green }}>{SA_ENGINES[engine].name}</div>
+            <button onClick={() => setEngine(null)} style={{ background: "transparent", color: C.textMuted, border: `1px solid ${C.border}`, borderRadius: 5, padding: "4px 12px", fontSize: 12, cursor: "pointer" }}>Close</button>
+          </div>
+          <div style={{ fontSize: 13, color: C.textDim, marginBottom: 14 }}>{SA_ENGINES[engine].does}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+            {[["CONSUMES", SA_ENGINES[engine].consumes], ["OUTPUTS", SA_ENGINES[engine].outputs], ["TECHNOLOGY", SA_ENGINES[engine].tech]].map(([k, v], i) => (
+              <div key={i} style={{ background: C.bg, borderRadius: 6, padding: 12 }}>
+                <div style={{ fontSize: 10, color: C.textMuted, letterSpacing: 1, marginBottom: 6 }}>{k}</div>
+                <div style={{ fontSize: 12, color: C.text }}>{v}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── MAIN APP ────────────────────────────────────────────────────
 export default function IOCCPrototype() {
   const [tab, setTab] = useState(0);
@@ -1461,6 +1723,7 @@ export default function IOCCPrototype() {
     { label: "⚡  IROP Recovery", component: <IROPRecovery /> },
     { label: "📅  Dec Crisis Replay", component: <CrisisReplay /> },
     { label: "🧑‍✈️  Crew Recovery", component: <CrewRecovery /> },
+    { label: "🏗️  System Architecture", component: <SystemArchitecture /> },
     { label: "🤖  AI Assistant", component: <AIAssistant /> },
   ];
 

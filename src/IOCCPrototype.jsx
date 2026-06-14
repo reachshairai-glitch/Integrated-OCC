@@ -823,6 +823,10 @@ function CrewMap({ height = 300, movements = [] }) {
     return () => clearInterval(t);
   }, []);
 
+  // Stable signature of the moves so the map only rebuilds when they change
+  // (not on every parent re-render from the 1s header clock tick).
+  const movesSig = movements.map((m) => `${m.crew}:${m.from}>${m.to}`).join("|");
+
   useEffect(() => {
     if (!ready || !mapRef.current) return;
     const L = window.L;
@@ -873,7 +877,7 @@ function CrewMap({ height = 300, movements = [] }) {
     map.fitBounds(bounds, { paddingTopLeft: [30, 24], paddingBottomRight: [44, 30] });
 
     return () => { if (instanceRef.current) { instanceRef.current.remove(); instanceRef.current = null; } };
-  }, [ready, movements]);
+  }, [ready, movesSig]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return <div ref={mapRef} style={{ height, borderRadius: 6, overflow: "hidden", background: C.bg }} />;
 }

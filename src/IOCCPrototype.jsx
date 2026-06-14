@@ -614,7 +614,7 @@ function IROPRecovery() {
       <SectionHeader
         title="IROP Recovery Engine"
         sub="AI-generated ranked recovery options  ·  Human-in-the-loop approval  ·  Target: recovery plan in under 3 minutes"
-        badge={<AlertBadge level="critical" text="🚨 ACTIVE IROP — FL-204 DEL→BOM" />}
+        badge={<AlertBadge level="critical" text="🚨 ACTIVE IROP — FL-204 · DEL→BOM" />}
       />
 
       {/* Incident Summary */}
@@ -1059,7 +1059,7 @@ function CrewRecovery() {
       <SectionHeader
         title="Crew Recovery Engine"
         sub="FDTL-aware reserve matching  ·  deadhead positioning  ·  human-in-the-loop approval"
-        badge={<AlertBadge level="critical" text="🚨 ACTIVE CREW SHORTFALL — DEL + BLR" />}
+        badge={<AlertBadge level="critical" text="🚨 ACTIVE IROP — FL-204 · CREW SHORTFALL" />}
       />
 
       {/* Active crew disruption summary */}
@@ -1584,7 +1584,7 @@ function PassengerRecovery() {
       <SectionHeader
         title="Passenger Recovery"
         sub="Automated rebooking · notification · compensation · baggage recovery — unified passenger view for the active IROP"
-        badge={<AlertBadge level="critical" text="🚨 ACTIVE IROP — FL-204" />}
+        badge={<AlertBadge level="critical" text="🚨 ACTIVE IROP — FL-204 · DEL→BOM" />}
       />
 
       {/* Disruption banner + manual override */}
@@ -2132,7 +2132,7 @@ export default function IOCCPrototype() {
             <div style={{ fontFamily: "monospace", fontSize: 13, color: C.text, letterSpacing: 1 }}>
               {now.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })} <span style={{ fontSize: 10, color: C.textMuted }}>IST</span>
             </div>
-            <AlertBadge level="warn" text="⚡ ACTIVE IROP — DELHI (DEL)" />
+            <AlertBadge level="warn" text="⚡ ACTIVE IROP — FL-204 · DEL→BOM" />
             <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.green, boxShadow: `0 0 6px ${C.green}` }} />
           </div>
         </div>

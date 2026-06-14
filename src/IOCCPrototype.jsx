@@ -818,8 +818,10 @@ function CrewMap({ height = 340, movements = [], reserves = [] }) {
       s.textContent = `
         @keyframes ioccFlow { to { stroke-dashoffset: -24; } }
         .iocc-flow { animation: ioccFlow 0.9s linear infinite; }
-        .leaflet-tooltip.iocc-crew-card { background: ${C.surfaceHigh}; border: 1px solid ${C.borderBright}; border-radius: 6px; box-shadow: 0 2px 10px rgba(0,0,0,0.45); padding: 0; }
+        .leaflet-tooltip.iocc-crew-card { background: ${C.surfaceHigh}; border: 1px solid ${C.borderBright}; border-radius: 6px; box-shadow: 0 2px 10px rgba(0,0,0,0.45); padding: 0; z-index: 650; }
         .leaflet-tooltip.iocc-crew-card::before { display: none; }
+        .leaflet-tooltip.iocc-crew-chip { background: transparent; border: none; box-shadow: none; padding: 0; }
+        .leaflet-tooltip.iocc-crew-chip::before { display: none; }
         .iocc-flighttag { font-family: monospace; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 4px; white-space: nowrap; background: ${C.bg}; }
         .iocc-hub-popup .leaflet-popup-content-wrapper { background: ${C.surfaceHigh} !important; border: 1px solid ${C.borderBright} !important; border-radius: 8px !important; color: ${C.text} !important; }
         .iocc-hub-popup .leaflet-popup-tip { background: ${C.surfaceHigh} !important; }
@@ -882,14 +884,20 @@ function CrewMap({ height = 340, movements = [], reserves = [] }) {
       const nxt = pts[mi + 1];
       const angle = Math.atan2(nxt[1] - mid[1], nxt[0] - mid[0]) * (180 / Math.PI);
       const arrow = L.divIcon({ className: "", html: `<div style="transform:rotate(${angle}deg);color:${color};font-size:16px;line-height:1;filter:drop-shadow(0 0 3px ${color})">➤</div>`, iconSize: [16, 16], iconAnchor: [8, 8] });
-      const arrowMk = L.marker(mid, { icon: arrow, zIndexOffset: 600, interactive: false }).addTo(map);
+      const arrowMk = L.marker(mid, { icon: arrow, zIndexOffset: 600, interactive: true }).addTo(map);
+      // Full detail card — shown on hover only.
       const card = `<div style="padding:6px 8px;border-left:3px solid ${color};min-width:128px">
         <div style="font-size:11px;font-weight:700;color:${C.text}">${m.crew}</div>
         <div style="font-size:9px;color:${C.textMuted}">${m.role}</div>
         <div style="font-size:9px;color:${C.textDim};font-family:monospace;margin-top:3px">${m.from}→${m.to} · dep ${m.dep} → arr ${m.arr}</div>
         <div style="font-size:9px;color:${color};font-weight:700;margin-top:2px">cover ${m.flight} · ${m.buffer}m buffer</div>
       </div>`;
-      arrowMk.bindTooltip(card, { permanent: true, direction: "top", offset: [0, -8 - idx * 6], className: "iocc-crew-card", interactive: false });
+      arrowMk.bindTooltip(card, { permanent: false, direction: "top", offset: [0, -10], className: "iocc-crew-card" });
+      // Compact permanent chip — name + buffer, colour-coded.
+      const short = m.crew.replace(/^(Capt|FO)\s+/, "");
+      const chip = `<div style="background:${C.surface};border:1px solid ${color};color:${color};border-radius:10px;padding:1px 6px;font-size:9px;font-weight:700;font-family:monospace;white-space:nowrap">${short} · ${m.buffer}m</div>`;
+      const chipMk = L.marker(mid, { icon: L.divIcon({ className: "", html: "", iconSize: [0, 0] }), interactive: false, zIndexOffset: 550 }).addTo(map);
+      chipMk.bindTooltip(chip, { permanent: true, direction: "top", offset: [0, -7 - idx * 15], className: "iocc-crew-chip" });
 
       // Flight tag at the destination showing the flight being recovered.
       const tag = L.divIcon({ className: "", html: `<div class="iocc-flighttag" style="color:${color};border:1px solid ${color}">✈ ${m.flight}</div>`, iconSize: [1, 1], iconAnchor: [-9, 4 + idx * 16] });

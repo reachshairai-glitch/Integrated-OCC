@@ -838,7 +838,7 @@ function CrewMap({ height = 300, movements = [] }) {
     L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png", { subdomains: "abcd", maxZoom: 19, opacity: 0.5 }).addTo(map);
 
     // Crew movement arrows (deadhead positioning).
-    movements.forEach((m) => {
+    movements.forEach((m, idx) => {
       const from = MAP_AIRPORTS[m.from];
       const to = MAP_AIRPORTS[m.to];
       if (!from || !to) return;
@@ -850,7 +850,8 @@ function CrewMap({ height = 300, movements = [] }) {
         const f = i / steps;
         const lat = from.lat + (to.lat - from.lat) * f;
         const lng = from.lng + (to.lng - from.lng) * f;
-        const b = Math.sin(Math.PI * f) * dist * 0.2;
+        // Vary the bulge per move so two crew on the same sector don't overlap.
+        const b = Math.sin(Math.PI * f) * dist * (0.18 + idx * 0.06);
         pts.push([lat - ((to.lng - from.lng) / dist) * b, lng + ((to.lat - from.lat) / dist) * b]);
       }
       L.polyline(pts, { color, weight: 2.5, opacity: 0.9, dashArray: "6,5" }).addTo(map);
@@ -860,7 +861,7 @@ function CrewMap({ height = 300, movements = [] }) {
       const angle = Math.atan2(nxt[1] - mid[1], nxt[0] - mid[0]) * (180 / Math.PI);
       const icon = L.divIcon({ className: "", html: `<div style="transform:rotate(${angle}deg);color:${color};font-size:16px;line-height:1;filter:drop-shadow(0 0 3px ${color})">➤</div>`, iconSize: [16, 16], iconAnchor: [8, 8] });
       const mk = L.marker(mid, { icon, zIndexOffset: 600 }).addTo(map);
-      mk.bindTooltip(m.crew, { permanent: true, direction: "top", offset: [0, -6], className: "iocc-crew-label" });
+      mk.bindTooltip(m.crew, { permanent: true, direction: "top", offset: [0, -6 - idx * 9], className: "iocc-crew-label" });
     });
 
     // Base markers (DEL/BOM/BLR/HYD/MAA), highlighted if part of a move.
@@ -909,25 +910,27 @@ function CrewRecovery() {
 
   const options = [
     {
-      rank: 1, label: "Local Reserve Activation", confidence: 94, cost: "₹1.8L", color: C.green,
-      detail: "All four gaps covered by reserves already at base — no positioning flights required. Lowest cost, fastest to execute, fully FDTL Phase II compliant.",
+      rank: 1, label: "Minimal Positioning", confidence: 94, cost: "₹2.4L", color: C.green,
+      detail: "DEL gaps covered by local reserves; a single deadhead positions FO R. Nair HYD→BLR to cover the Bengaluru departure. Lowest cost, highest confidence, fully FDTL Phase II compliant.",
       assignments: [
         { crew: "Capt A. Verma", base: "DEL", flight: "FL-207 DEL→HYD", move: "Local — at DEL" },
         { crew: "FO M. Iyer", base: "DEL", flight: "FL-219 DEL→CCU", move: "Local — at DEL" },
-        { crew: "Capt D. Banerjee", base: "BLR", flight: "FL-233 BLR→DEL", move: "Standby callout — BLR" },
+        { crew: "FO R. Nair", base: "HYD", flight: "FL-233 BLR→DEL", move: "Deadhead HYD→BLR" },
         { crew: "FO N. Menon", base: "BLR", flight: "FL-241 BLR→BOM", move: "Local — at BLR" },
       ],
-      movements: [],
+      movements: [
+        { crew: "FO R. Nair", from: "HYD", to: "BLR", color: C.green },
+      ],
       timeline: [
-        { flight: "FL-233 BLR→DEL", dep: 35, ready: 12 },
+        { flight: "FL-233 BLR→DEL", dep: 35, ready: 18 },
         { flight: "FL-207 DEL→HYD", dep: 95, ready: 30 },
         { flight: "FL-219 DEL→CCU", dep: 140, ready: 45 },
         { flight: "FL-241 BLR→BOM", dep: 205, ready: 70 },
       ],
     },
     {
-      rank: 2, label: "Hybrid Position + Local", confidence: 87, cost: "₹4.2L", color: C.amber,
-      detail: "Two local reserves plus two deadhead positionings (BOM→DEL, HYD→BLR). Adds positioning cost and two tight crew-in-position windows, but spreads the fatigue load across bases.",
+      rank: 2, label: "Balanced Positioning", confidence: 87, cost: "₹4.2L", color: C.amber,
+      detail: "Two deadhead positionings (BOM→DEL and HYD→BLR) spread the fatigue load across bases. Adds positioning cost and a second tight crew-in-position window.",
       assignments: [
         { crew: "Capt A. Verma", base: "DEL", flight: "FL-207 DEL→HYD", move: "Local — at DEL" },
         { crew: "FO K. Pillai", base: "BOM", flight: "FL-219 DEL→CCU", move: "Deadhead BOM→DEL" },
@@ -946,23 +949,24 @@ function CrewRecovery() {
       ],
     },
     {
-      rank: 3, label: "Network Repositioning", confidence: 79, cost: "₹6.5L", color: C.amber,
-      detail: "Maximum flexibility using standby + positioning across three bases. Highest cost and the tightest crew-in-position windows — hold in reserve unless local crews are withdrawn.",
+      rank: 3, label: "Network Repositioning", confidence: 79, cost: "₹6.8L", color: C.amber,
+      detail: "Maximum flexibility using three deadhead positionings (two BOM→DEL, one HYD→BLR) plus a BLR standby callout. Highest cost and the tightest crew-in-position windows — hold unless local reserves are withdrawn.",
       assignments: [
         { crew: "Capt V. Rao", base: "BOM", flight: "FL-207 DEL→HYD", move: "Deadhead BOM→DEL (enroute)" },
-        { crew: "Capt S. Gill", base: "DEL", flight: "FL-219 DEL→CCU", move: "Standby callout — DEL" },
+        { crew: "FO K. Pillai", base: "BOM", flight: "FL-219 DEL→CCU", move: "Deadhead BOM→DEL" },
         { crew: "FO R. Nair", base: "HYD", flight: "FL-233 BLR→DEL", move: "Deadhead HYD→BLR" },
         { crew: "Capt D. Banerjee", base: "BLR", flight: "FL-241 BLR→BOM", move: "Standby callout — BLR" },
       ],
       movements: [
         { crew: "Capt V. Rao", from: "BOM", to: "DEL", color: C.amber },
+        { crew: "FO K. Pillai", from: "BOM", to: "DEL", color: C.amber },
         { crew: "FO R. Nair", from: "HYD", to: "BLR", color: C.amber },
       ],
       timeline: [
         { flight: "FL-233 BLR→DEL", dep: 35, ready: 22 },
         { flight: "FL-207 DEL→HYD", dep: 95, ready: 78 },
         { flight: "FL-219 DEL→CCU", dep: 140, ready: 115 },
-        { flight: "FL-241 BLR→BOM", dep: 205, ready: 182 },
+        { flight: "FL-241 BLR→BOM", dep: 205, ready: 150 },
       ],
     },
   ];

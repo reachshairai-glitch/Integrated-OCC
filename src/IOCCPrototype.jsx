@@ -116,13 +116,17 @@ const routes = [
 
 // ── COMPONENTS ──────────────────────────────────────────────────
 
-function Metric({ label, value, unit, status, delta }) {
+function Metric({ label, value, unit, status, delta, pulse, live }) {
   const statusColor = status === "good" ? C.green : status === "warn" ? C.amber : status === "bad" ? C.red : C.cyan;
   return (
-    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "16px 20px", flex: 1, minWidth: 140 }}>
-      <div style={{ fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>{label}</div>
+    <div className={pulse ? "iocc-pulse" : undefined}
+      style={{ background: C.surface, border: `1px solid ${pulse ? C.amber : C.border}`, borderRadius: 8, padding: "16px 20px", flex: 1, minWidth: 140, transition: "border-color 0.4s" }}>
+      <div style={{ fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+        {label}
+        {live && <span className="iocc-live-dot" style={{ width: 6, height: 6, borderRadius: "50%", background: C.cyan, display: "inline-block", boxShadow: `0 0 5px ${C.cyan}` }} />}
+      </div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
-        <span style={{ fontSize: 28, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", color: statusColor }}>{value}</span>
+        <span style={{ fontSize: 28, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", color: statusColor, transition: "color 0.3s" }}>{value}</span>
         {unit && <span style={{ fontSize: 13, color: C.textMuted }}>{unit}</span>}
       </div>
       {delta && <div style={{ fontSize: 11, color: delta.startsWith("+") ? C.red : C.green, marginTop: 4 }}>{delta} vs yesterday</div>}
@@ -277,12 +281,103 @@ function NetworkMap({ height = 240 }) {
   return <div ref={mapRef} style={{ height, borderRadius: 6, overflow: "hidden", background: C.bg }} />;
 }
 
+// ── LIVE ALERT DATA ─────────────────────────────────────────────
+const INITIAL_ALERTS = [
+  { id: 1, time: "07:42", code: "FL-204", issue: "Crew duty window expires in 48 min — IGI delay cascade", level: "critical", action: "Recovery options generated" },
+  { id: 2, time: "07:38", code: "FL-891", issue: "Aircraft rotation break at BLR — 22 min delay propagation", level: "warn", action: "Crew swap initiated" },
+  { id: 3, time: "07:31", code: "NETWORK", issue: "IGI fog: 67 min average ground delay — crew duty impact model running", level: "warn", action: "Contingency playbook activated" },
+  { id: 4, time: "07:18", code: "FL-112", issue: "FDTL limit reached — Captain Singh. Reserve crew positioning.", level: "ok", action: "Resolved ✓" },
+];
+
+const ALERT_POOL = [
+  { code: "FL-318", issue: "Tech log entry — A320 VT-IZB sensor fault flagged for engineering", level: "warn", action: "Engineering notified" },
+  { code: "FL-552", issue: "ATC flow control at BOM — 18 min ground hold imposed", level: "warn", action: "Pax app updated" },
+  { code: "NETWORK", issue: "Crosswind gusts at HYD exceeding 25kt — approach monitoring", level: "warn", action: "Met watch active" },
+  { code: "FL-771", issue: "Tight inbound connection — 42 pax transfer risk at DEL", level: "warn", action: "Re-accommodation queued" },
+  { code: "FL-446", issue: "Medical assistance requested on arrival — BLR stand 22", level: "critical", action: "Ground ops + medics alerted" },
+  { code: "FL-129", issue: "Catering uplift delay at MAA — 12 min turnaround impact", level: "ok", action: "Resolved ✓" },
+  { code: "FL-288", issue: "Bird activity reported near IGI 28L — ops on alert", level: "warn", action: "Wildlife control dispatched" },
+  { code: "FL-903", issue: "Fuel uplift recalculated for headwind — DEL→CCU", level: "ok", action: "Dispatch confirmed ✓" },
+  { code: "CREW", issue: "Standby crew activated at BOM — proactive cover for evening bank", level: "ok", action: "Roster updated ✓" },
+  { code: "FL-410", issue: "Baggage belt fault at HYD — manual offload in progress", level: "warn", action: "Maintenance en route" },
+  { code: "FL-615", issue: "Gate change at BOM T2 — pax reflow to gate 41", level: "ok", action: "Signage updated ✓" },
+  { code: "NETWORK", issue: "ADS-B coverage gap over central sector — secondary radar in use", level: "warn", action: "ATC coordinating" },
+  { code: "FL-067", issue: "Slot improvement at DEL — 9 min earlier departure available", level: "ok", action: "Schedule optimised ✓" },
+  { code: "FL-734", issue: "Thunderstorm cell tracking toward CCU approach corridor", level: "critical", action: "Reroute under review" },
+];
+
 // ── SCREEN: DASHBOARD ───────────────────────────────────────────
 function Dashboard() {
-  const [tick, setTick] = useState(0);
-  useEffect(() => { const t = setInterval(() => setTick(x => x + 1), 3000); return () => clearInterval(t); }, []);
-  const liveOTP = (85 + Math.sin(tick * 0.7) * 3).toFixed(1);
-  const liveCancel = Math.floor(4 + Math.sin(tick * 0.5) * 2);
+  // Inject animation keyframes once (pulse glow, blinking live dot, alert slide-in).
+  useEffect(() => {
+    if (document.getElementById("iocc-anim")) return;
+    const s = document.createElement("style");
+    s.id = "iocc-anim";
+    s.textContent = `
+      @keyframes ioccPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(245,158,11,0); } 50% { box-shadow: 0 0 16px 2px rgba(245,158,11,0.55); } }
+      .iocc-pulse { animation: ioccPulse 1.8s ease-in-out infinite; }
+      @keyframes ioccBlink { 0%,100% { opacity: 1; } 50% { opacity: 0.15; } }
+      .iocc-live-dot { animation: ioccBlink 1.4s ease-in-out infinite; }
+      @keyframes ioccAlertIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+      .iocc-alert-in { animation: ioccAlertIn 0.5s ease-out; }
+    `;
+    document.head.appendChild(s);
+  }, []);
+
+  // Live KPI state — each tile random-walks within a realistic band, every 4s.
+  const [kpi, setKpi] = useState({ otp: 87.2, airborne: 437, flightsToday: 2247, cancellations: 4, crew: 91.4, risk: 38, pax: 1840 });
+  useEffect(() => {
+    const wander = (v, step, min, max) => Math.max(min, Math.min(max, v + (Math.random() - 0.5) * step));
+    const t = setInterval(() => {
+      setKpi(k => ({
+        ...k,
+        otp: +wander(k.otp, 0.7, 83.5, 90).toFixed(1),
+        crew: +wander(k.crew, 0.5, 88, 94).toFixed(1),
+        risk: Math.round(wander(k.risk, 4, 28, 62)),
+        pax: Math.round(wander(k.pax, 45, 1480, 2200)),
+        cancellations: Math.max(0, Math.min(9, k.cancellations + (Math.random() < 0.35 ? (Math.random() < 0.5 ? -1 : 1) : 0))),
+        flightsToday: k.flightsToday + (Math.random() < 0.6 ? 1 : 0),
+      }));
+    }, 4000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Flights airborne refreshes faster for a real-time feel.
+  useEffect(() => {
+    const t = setInterval(() => {
+      setKpi(k => ({ ...k, airborne: Math.max(388, Math.min(496, Math.round(k.airborne + (Math.random() - 0.5) * 10))) }));
+    }, 2000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Rolling OTP series — append a fresh point every 30s, drop the oldest.
+  const [otpSeries, setOtpSeries] = useState(flightData);
+  useEffect(() => {
+    const t = setInterval(() => {
+      const time = new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: false });
+      setOtpSeries(prev => [...prev.slice(1), {
+        time,
+        flights: 240 + Math.round(Math.random() * 70),
+        cancelled: Math.round(Math.random() * 6),
+        otpPct: Math.round(84 + Math.random() * 6),
+      }]);
+    }, 30000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Live alert queue — prepend from the pool every 8s, keep the newest 5.
+  const alertId = useRef(100);
+  const poolIdx = useRef(0);
+  const [alerts, setAlerts] = useState(INITIAL_ALERTS);
+  useEffect(() => {
+    const t = setInterval(() => {
+      const a = ALERT_POOL[poolIdx.current % ALERT_POOL.length];
+      poolIdx.current += 1;
+      const time = new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: false });
+      setAlerts(prev => [{ ...a, time, id: alertId.current++ }, ...prev].slice(0, 5));
+    }, 8000);
+    return () => clearInterval(t);
+  }, []);
 
   return (
     <div>
@@ -294,19 +389,20 @@ function Dashboard() {
 
       {/* KPI Row */}
       <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-        <Metric label="On-Time Performance" value={liveOTP} unit="%" status="warn" delta="+1.2%" />
-        <Metric label="Flights Today" value="2,247" status="good" />
-        <Metric label="Cancellations" value={liveCancel} status={liveCancel > 5 ? "warn" : "good"} delta="+2" />
-        <Metric label="Crew Availability" value="91.4" unit="%" status="warn" delta="-2.3%" />
-        <Metric label="Disruption Risk Index" value="38" unit="/100" status="warn" />
-        <Metric label="Pax Impacted" value="1,840" status="warn" delta="+320" />
+        <Metric label="On-Time Performance" value={kpi.otp.toFixed(1)} unit="%" status={kpi.otp >= 85 ? "good" : "warn"} delta="+1.2%" />
+        <Metric label="Flights Airborne Now" value={kpi.airborne} status="good" live />
+        <Metric label="Flights Today" value={kpi.flightsToday.toLocaleString("en-IN")} status="good" />
+        <Metric label="Cancellations" value={kpi.cancellations} status={kpi.cancellations > 5 ? "warn" : "good"} delta="+2" />
+        <Metric label="Crew Availability" value={kpi.crew.toFixed(1)} unit="%" status="warn" delta="-2.3%" />
+        <Metric label="Disruption Risk Index" value={kpi.risk} unit="/100" status={kpi.risk > 50 ? "bad" : "warn"} pulse={kpi.risk > 35} />
+        <Metric label="Pax Impacted" value={kpi.pax.toLocaleString("en-IN")} status="warn" delta="+320" />
       </div>
 
       {/* OTP Trend */}
       <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 16 }}>
         <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 16 }}>OTP & Cancellations — Today</div>
         <ResponsiveContainer width="100%" height={180}>
-          <ComposedChart data={flightData}>
+          <ComposedChart data={otpSeries}>
             <defs>
               <linearGradient id="otpGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor={C.green} stopOpacity={0.3} />
@@ -338,14 +434,14 @@ function Dashboard() {
 
       {/* Active Alerts */}
       <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20 }}>
-        <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 14 }}>Active Alerts — OCC Queue</div>
-        {[
-          { time: "07:42", code: "FL-204", issue: "Crew duty window expires in 48 min — IGI delay cascade", level: "critical", action: "Recovery options generated" },
-          { time: "07:38", code: "FL-891", issue: "Aircraft rotation break at BLR — 22 min delay propagation", level: "warn", action: "Crew swap initiated" },
-          { time: "07:31", code: "NETWORK", issue: "IGI fog: 67 min average ground delay — crew duty impact model running", level: "warn", action: "Contingency playbook activated" },
-          { time: "07:18", code: "FL-112", issue: "FDTL limit reached — Captain Singh. Reserve crew positioning.", level: "ok", action: "Resolved ✓" },
-        ].map((alert, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: i < 3 ? `1px solid ${C.border}` : "none" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <div style={{ fontSize: 13, color: C.textMuted }}>Active Alerts — OCC Queue</div>
+          <span style={{ fontSize: 10, color: C.green, display: "flex", alignItems: "center", gap: 6, fontFamily: "monospace", letterSpacing: 1 }}>
+            <span className="iocc-live-dot" style={{ width: 6, height: 6, borderRadius: "50%", background: C.green, display: "inline-block", boxShadow: `0 0 5px ${C.green}` }} /> LIVE
+          </span>
+        </div>
+        {alerts.map((alert, i) => (
+          <div key={alert.id} className={i === 0 ? "iocc-alert-in" : undefined} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: i < alerts.length - 1 ? `1px solid ${C.border}` : "none" }}>
             <span style={{ fontFamily: "monospace", fontSize: 11, color: C.textMuted, width: 40 }}>{alert.time}</span>
             <span style={{ fontFamily: "monospace", fontSize: 11, color: C.cyan, width: 70 }}>{alert.code}</span>
             <span style={{ fontSize: 12, color: C.text, flex: 1 }}>{alert.issue}</span>
@@ -789,6 +885,8 @@ function AIAssistant() {
 // ── MAIN APP ────────────────────────────────────────────────────
 export default function IOCCPrototype() {
   const [tab, setTab] = useState(0);
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
   const tabs = [
     { label: "🖥️  OCC Dashboard", component: <Dashboard /> },
     { label: "🔮  Disruption Prediction", component: <DisruptionPrediction /> },
@@ -810,8 +908,8 @@ export default function IOCCPrototype() {
             </div>
           </div>
           <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
-            <div style={{ fontFamily: "monospace", fontSize: 11, color: C.textMuted }}>
-              {new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" })} IST
+            <div style={{ fontFamily: "monospace", fontSize: 13, color: C.text, letterSpacing: 1 }}>
+              {now.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })} <span style={{ fontSize: 10, color: C.textMuted }}>IST</span>
             </div>
             <AlertBadge level="warn" text="⚡ ACTIVE IROP — DELHI (DEL)" />
             <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.green, boxShadow: `0 0 6px ${C.green}` }} />

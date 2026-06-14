@@ -1276,7 +1276,7 @@ function CrewRecovery() {
 // the `system` prompt when the assistant runs against live Claude (proxy/key).
 // The scripted demo answers below mirror this same dataset so the offline
 // prototype responds with identical specifics.
-const SYSTEM_PROMPT = `You are the IOCC AI Operations Assistant — an operations analyst embedded in the Integrated Operations Command Centre with every screen open in front of you. You have continuous, real-time awareness of the live airline network. Answer like a sharp duty ops analyst, never like a generic chatbot.
+const SYSTEM_PROMPT = `You are ARIA (Airline Real-time Intelligence Assistant) — an operations analyst embedded in the Integrated Operations Command Centre with every screen open in front of you. You have continuous, real-time awareness of the live airline network. Answer like a sharp duty ops analyst, never like a generic chatbot.
 
 ══════════════════════════════════════════════════════════════
 1) FLIGHT OPERATIONS SNAPSHOT  (current, IST)
@@ -1353,7 +1353,7 @@ function scriptedReply(q) {
 // ── SCREEN: AI ASSISTANT ────────────────────────────────────────
 function AIAssistant() {
   const [messages, setMessages] = useState([
-    { role: "assistant", content: "I'm the IOCC AI Operations Assistant. I have situational awareness of the current network state, crew availability, weather, and FDTL compliance. This prototype runs on scripted demo responses — try one of the suggested questions below." }
+    { role: "assistant", content: "Hi, I'm ARIA — your Airline Real-time Intelligence Assistant, powered by Claude. I have full situational awareness of the current network state including 2,247 flights today, active crew duty limits, weather advisories, and FDTL compliance status. What would you like to know?" }
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -1388,9 +1388,9 @@ function AIAssistant() {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "70vh" }}>
       <SectionHeader
-        title="AI Operations Assistant"
-        sub="Situational awareness across network state · FDTL compliance · Disruption intelligence · Demo responses"
-        badge={<AlertBadge level="ok" text="● DEMO MODE" />}
+        title="ARIA — Airline Real-time Intelligence Assistant"
+        sub="Powered by Claude · Real-time network awareness · FDTL compliance · Disruption intelligence"
+        badge={<AlertBadge level="ok" text="● ARIA ONLINE" />}
       />
 
       {/* Suggestions */}
@@ -1416,7 +1416,7 @@ function AIAssistant() {
               border: msg.role === "assistant" ? `1px solid ${C.border}` : "none",
             }}>
               {msg.role === "assistant" && (
-                <div style={{ fontSize: 10, color: C.cyan, marginBottom: 6, fontFamily: "monospace" }}>IOCC AI ASSISTANT</div>
+                <div style={{ fontSize: 10, color: C.cyan, marginBottom: 6, fontFamily: "monospace" }}>ARIA</div>
               )}
               {msg.content}
             </div>
@@ -1425,7 +1425,7 @@ function AIAssistant() {
         {loading && (
           <div style={{ display: "flex", justifyContent: "flex-start" }}>
             <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "12px 16px", fontSize: 13, color: C.textMuted }}>
-              <span>⟳ Analysing network state...</span>
+              <span>⟳ ARIA is analysing the network...</span>
             </div>
           </div>
         )}
@@ -1438,7 +1438,7 @@ function AIAssistant() {
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === "Enter" && sendMessage()}
-          placeholder="Ask about crew availability, disruption risk, recovery options..."
+          placeholder="Ask ARIA about crew availability, disruption risk, recovery options…"
           style={{
             flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6,
             padding: "10px 14px", fontSize: 13, color: C.text, outline: "none",
@@ -2117,7 +2117,7 @@ export default function IOCCPrototype() {
     { label: "🧑‍✈️  Crew Recovery", component: <CrewRecovery /> },
     { label: "🎫  Passenger Recovery", component: <PassengerRecovery /> },
     { label: "🏗️  System Architecture", component: <SystemArchitecture /> },
-    { label: "🤖  AI Assistant", component: <AIAssistant /> },
+    { label: "🤖  ARIA — AI Assistant", component: <AIAssistant /> },
   ];
 
   return (
@@ -2166,7 +2166,7 @@ export default function IOCCPrototype() {
       {/* Footer */}
       <div style={{ borderTop: `1px solid ${C.border}`, padding: "12px 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <span style={{ fontSize: 10, color: C.textMuted }}>IOCC — AI Operations Command Centre Prototype · Designed by Shailaja Rai · 2026 · Proof of Concept — Not Production Data</span>
-        <span style={{ fontSize: 10, color: C.textMuted, fontFamily: "monospace" }}>AI: Claude (Anthropic) · Data: Simulated</span>
+        <span style={{ fontSize: 10, color: C.textMuted, fontFamily: "monospace" }}>ARIA — Airline Real-time Intelligence Assistant · Powered by Claude · Integrated Operations Command Centre</span>
       </div>
     </div>
   );

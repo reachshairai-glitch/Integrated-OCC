@@ -1353,7 +1353,7 @@ function scriptedReply(q) {
 // ── SCREEN: AI ASSISTANT ────────────────────────────────────────
 function AIAssistant() {
   const [messages, setMessages] = useState([
-    { role: "assistant", content: "Hi, I'm ARIA — your Airline Real-time Intelligence Assistant, powered by Claude. I have full situational awareness of the current network state including 2,247 flights today, active crew duty limits, weather advisories, and FDTL compliance status. What would you like to know?" }
+    { role: "assistant", content: "Hi, I'm ARIA — your Airline Real-time Intelligence Assistant. I have full situational awareness of the current network state including 2,247 flights today, active crew duty limits, weather advisories, and FDTL compliance status. What would you like to know?" }
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -1389,7 +1389,7 @@ function AIAssistant() {
     <div style={{ display: "flex", flexDirection: "column", height: "70vh" }}>
       <SectionHeader
         title="ARIA — Airline Real-time Intelligence Assistant"
-        sub="Powered by Claude · Real-time network awareness · FDTL compliance · Disruption intelligence"
+        sub="Real-time network awareness · FDTL compliance · Disruption intelligence"
         badge={<AlertBadge level="ok" text="● ARIA ONLINE" />}
       />
 
@@ -2166,7 +2166,7 @@ export default function IOCCPrototype() {
       {/* Footer */}
       <div style={{ borderTop: `1px solid ${C.border}`, padding: "12px 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <span style={{ fontSize: 10, color: C.textMuted }}>IOCC — AI Operations Command Centre Prototype · Designed by Shailaja Rai · 2026 · Proof of Concept — Not Production Data</span>
-        <span style={{ fontSize: 10, color: C.textMuted, fontFamily: "monospace" }}>ARIA — Airline Real-time Intelligence Assistant · Powered by Claude · Integrated Operations Command Centre</span>
+        <span style={{ fontSize: 10, color: C.textMuted, fontFamily: "monospace" }}>ARIA — Airline Real-time Intelligence Assistant · Integrated Operations Command Centre</span>
       </div>
     </div>
   );

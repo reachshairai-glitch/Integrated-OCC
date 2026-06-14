@@ -784,25 +784,83 @@ function CrisisReplay() {
   );
 }
 
-// ── SCRIPTED ASSISTANT (offline demo — no API key, safe for public hosting) ──
+// ── LIVE-NETWORK SYSTEM PROMPT ──────────────────────────────────
+// This is the full operating context for the assistant. It is used verbatim as
+// the `system` prompt when the assistant runs against live Claude (proxy/key).
+// The scripted demo answers below mirror this same dataset so the offline
+// prototype responds with identical specifics.
+const SYSTEM_PROMPT = `You are the IOCC AI Operations Assistant — an operations analyst embedded in the Integrated Operations Command Centre with every screen open in front of you. You have continuous, real-time awareness of the live airline network. Answer like a sharp duty ops analyst, never like a generic chatbot.
+
+══════════════════════════════════════════════════════════════
+1) FLIGHT OPERATIONS SNAPSHOT  (current, IST)
+FLIGHT   ROUTE      STATUS         DELAY    ACTIVE ISSUE
+FL-204   DEL→BOM    Boarding hold  +0       Crew duty limit expires in 48 min — recovery options generated (186 pax)
+FL-891   BLR→DEL    Delayed        +22 min  Aircraft rotation break at BLR
+FL-318   BOM→DEL    Delayed        +18 min  A320 VT-IZB sensor fault — engineering review
+FL-552   BOM→MAA    Ground hold    +18 min  ATC flow control at BOM
+FL-734   CCU→DEL    Delayed        +35 min  Thunderstorm cell near CCU corridor — reroute under review
+FL-446   HYD→BLR    Airborne       0        Medical case on board — medics alerted, BLR stand 22
+FL-771   DEL→CCU    Boarding       +5 min   Tight inbound connection — 42 pax transfer risk at DEL
+FL-112   DEL→HYD    Departed       0        FDTL limit hit earlier (Capt Singh) — reserve crew positioned
+FL-615   BOM→HYD    Boarding       +0       Gate change to 41, BOM T2
+FL-903   DEL→CCU    Scheduled      0        Fuel recalculated for forecast headwind
+
+2) CREW STATUS — FDTL Phase II (max duty 12h)
+CREW              BASE  ASSIGNMENT          ELAPSED   REMAINING   STATUS
+Capt R. Sharma    DEL   FL-204 DEL→BOM      9h 46m    2h 14m      AT RISK
+FO A. Patel       DEL   FL-891 BLR→DEL      10h 12m   1h 48m      CRITICAL
+Capt H. Singh     BLR   FL-112 reserve      8h 58m    3h 02m      AT RISK
+FO P. Khan        DEL   FL-771 DEL→CCU      9h 05m    2h 55m      AT RISK
+Capt M. Joshi     BOM   FL-318 BOM→DEL      7h 29m    4h 31m      CLEAR
+FO S. Reddy       HYD   FL-446 HYD→BLR      6h 42m    5h 18m      CLEAR
+Capt N. Iyer      MAA   FL-552 standby      3h 10m    8h 50m      CLEAR
+Capt D. Mehta     BOM   Reserve BOM-23      1h 20m    10h 40m     CLEAR
+
+3) WEATHER INTELLIGENCE  (now + 6h outlook)
+DEL/IGI : Vis 1200m mist, wind 320/06kt. ADVISORY: dense fog 06:00–10:00 IST tomorrow. 6h: deteriorating, vis →400m by 05:00, CAT III ops likely.
+BOM     : Vis 4000m haze, wind 270/14kt gust 22kt. Gusty crosswind advisory. 6h: improving, winds ease after 21:00.
+BLR     : Vis 3000m, wind 090/08kt, light drizzle. 6h: scattered showers, stable.
+HYD     : Vis 2500m, wind 250/25kt gust 31kt. CROSSWIND WATCH rwy 09L. 6h: winds persist — monitor.
+MAA     : Vis 6000m, wind 110/10kt, clear. 6h: stable, no advisories.
+
+4) NETWORK RISK SUMMARY  (top 3, ranked; cascade if unaddressed within 2h)
+#1 HIGH — IGI fog window (06:00–10:00 tmrw) colliding with 3 crew at/near FDTL limits. Cascade: 6–20 cancellations (41% Monte Carlo prob), ~1,800 pax disrupted, FDTL violations replicating the December pattern.
+#2 HIGH — FL-204 crew duty expiry in 48 min. Cascade: 186-pax misconnect at BOM + downstream hit to rotations FL-207 / FL-219 / FL-233, BOM evening bank degraded.
+#3 MEDIUM — HYD crosswind 25–31kt on 09L. Cascade: go-arounds/diversions, ~4 inbounds affected, added crew-duty pressure at HYD.
+
+5) HISTORICAL PATTERN CONTEXT
+December and January are historically the highest-risk months at IGI due to fog. In prior years this triggered cascading FDTL crew-duty violations — the December 2025 event cancelled ~4,500 flights, drove ₹5B in refunds, and stranded 3,000+ bags. The IOCC was purpose-built to break this cycle via probabilistic crew forecasting, Monte Carlo stress-testing, 3-minute IROP recovery, and unified Sabre/Amadeus/Thales data. Counterfactual replay shows an 84% reduction in cancellations.
+══════════════════════════════════════════════════════════════
+
+HOW TO ANSWER:
+- Always answer with specific data from the context above.
+- Cite flight numbers (FL-xxx) and crew names when relevant.
+- Quantify risk in numbers (minutes, probabilities, pax counts, ₹).
+- End EVERY response with a line beginning "Recommended action:" giving one clear, concrete next step.
+- Be concise and analytical. You have every screen open — sound like it.`;
+
+// ── SCRIPTED ASSISTANT (offline demo — mirrors SYSTEM_PROMPT; no API key) ──
 function scriptedReply(q) {
   const t = q.toLowerCase();
-  if (/(fdtl|crew|duty|limit|roster)/.test(t)) {
-    return "5 crew are within 3 hours of FDTL Phase II limits.\n\n• FO Patel (IGI-FO-891 · DEL) — 1h 48m remaining — CRITICAL\n• Capt Sharma (IGI-CR-204 · DEL) — 2h 14m — watch\n• Capt Singh (BLR-CR-112 · BLR) — 3h 02m — watch\n• Capt Joshi (BOM-CR-445 · BOM) — 4h 31m — OK\n• FO Reddy (HYD-FO-223 · HYD) — 5h 18m — OK\n\nReserve crew BLR-23 is positioned for the FL-204 swap. Recommend confirming the swap within the next 30 minutes to stay inside FO Patel's window.";
+  if (/(fdtl|crew|duty|limit|roster|fatigue)/.test(t)) {
+    return "Crew FDTL Phase II status — 4 of 8 monitored crew are inside their final 3 hours of duty:\n\n• FO A. Patel (DEL) — FL-891 — 1h 48m remaining — CRITICAL\n• Capt R. Sharma (DEL) — FL-204 — 2h 14m — AT RISK\n• FO P. Khan (DEL) — FL-771 — 2h 55m — AT RISK\n• Capt H. Singh (BLR) — reserve — 3h 02m — AT RISK\n• Capt M. Joshi (BOM) 4h 31m · FO S. Reddy (HYD) 5h 18m · Capt N. Iyer (MAA) 8h 50m — CLEAR\n\nThe binding constraint is FO Patel: at 1h 48m he cannot absorb any further BLR rotation slip, and FL-204 needs Capt Sharma swapped before his 2h 14m expires. Reserve crew BLR-23 and Capt D. Mehta (BOM, 10h 40m clear) are available.\n\nRecommended action: assign Capt Mehta to cover the FL-204 swap and hold FO Patel out of any extension — confirm within 30 minutes.";
   }
-  if (/(igi|fog|disruption risk|risk at|delhi|weather)/.test(t)) {
-    return "Current Disruption Risk Index is 38/100 (Moderate).\n\nPrimary driver: IGI Delhi fog advisory, 06:00–10:00 IST tomorrow, ~67 min average ground delay modelled. Network crew availability is 91.4%, though BLR is on alert at 88%.\n\nMonte Carlo (10,000 runs), next 36 hours:\n• 0–5 cancellations: 34%\n• 6–20: 41%\n• 21–50: 18%\n• 50+: 7%\n\nRecommended pre-action: position 3 reserve crew at IGI and pre-build the fog contingency playbook for tomorrow's window.";
+  if (/(weather|fog|igi|visibility|wind|crosswind|met)/.test(t)) {
+    return "Weather intelligence — network hubs:\n\n• DEL/IGI: vis 1200m mist, wind 320/06kt. DENSE FOG advisory 06:00–10:00 IST tomorrow; 6h outlook vis →400m by 05:00, CAT III likely.\n• HYD: vis 2500m, wind 250/25kt gust 31kt — CROSSWIND WATCH rwy 09L, persists 6h.\n• BOM: vis 4000m haze, 270/14kt gust 22kt — eases after 21:00.\n• BLR: vis 3000m, light drizzle, stable.\n• MAA: vis 6000m, clear, no advisories.\n\nThe IGI fog window is the dominant threat — it overlaps with 3 crew near FDTL limits, the same combination behind past December cascades.\n\nRecommended action: pre-position 3 reserve crew at DEL tonight and pre-build the fog playbook for the 06:00–10:00 window before visibility drops.";
   }
   if (/(fl-?204|recovery|irop|substitut|swap|option)/.test(t)) {
-    return "FL-204 (DEL→BOM · 186 pax) — crew duty limit expires in 48 minutes. Three FDTL-compliant recovery options, ranked:\n\n1. Crew Swap + Aircraft Hold — 94% confidence · 18 min delay · ₹2.1L · low pax impact  ← recommended\n2. Aircraft Substitution (VT-INA) — 87% · 34 min · ₹4.8L · medium\n3. Schedule Compression — 78% · 52 min · ₹6.2L · medium\n\nOption 1 recovers the network within ~3 hours. Approve it in the IROP Recovery tab — target decision time is under 3 minutes vs 45–90 min manual.";
+    return "FL-204 (DEL→BOM · 186 pax) — Capt R. Sharma's duty limit expires in 48 min. Three FDTL-compliant recovery options, ranked:\n\n1. Crew Swap (Capt Mehta) + Aircraft Hold — 94% confidence · 18 min delay · ₹2.1L · low pax impact  ← recommended\n2. Aircraft Substitution (A320 VT-INA) — 87% · 34 min · ₹4.8L · medium\n3. Schedule Compression — 78% · 52 min · ₹6.2L · medium\n\nOption 1 keeps Sharma legal and recovers the network within ~3 hours; doing nothing risks a 186-pax misconnect at BOM plus downstream hits to FL-207/219/233.\n\nRecommended action: approve Option 1 in the IROP Recovery tab now — decision target under 3 minutes vs 45–90 min manual.";
   }
-  if (/(december|crisis|cascade|historical|replay)/.test(t)) {
-    return "A December-style cascade today would require the same five root causes to align:\n\n1. Regulatory–roster mismatch\n2. No probabilistic crew forecasting\n3. Weather amplification at IGI\n4. No stochastic stress-testing\n5. Fragmented Sabre / Amadeus / Thales data\n\nThe IOCC now addresses all five. Counterfactual replay of the actual event shows an ~84% reduction in cancellations (see the Dec Crisis Replay tab). The closest live analogue is tomorrow's IGI fog window — already modelled and mitigated.";
+  if (/(risk|disruption|top|cascade|priorit|threat)/.test(t)) {
+    return "Top 3 network risks right now, ranked (cascade if not addressed in 2h):\n\n#1 HIGH — IGI fog (06:00–10:00 tmrw) + 3 crew near FDTL limits. → 6–20 cancellations (41% Monte Carlo), ~1,800 pax, December-style FDTL violations.\n#2 HIGH — FL-204 crew duty expiry in 48 min. → 186-pax misconnect at BOM, downstream FL-207/219/233, BOM evening bank degraded.\n#3 MEDIUM — HYD crosswind 25–31kt on 09L. → go-arounds/diversions, ~4 inbounds, added HYD crew-duty pressure.\n\nDisruption Risk Index is 38/100 and trending up with the fog window.\n\nRecommended action: clear #2 immediately with the FL-204 crew swap, then lock the IGI reserve-crew plan for #1 before 22:00.";
   }
-  if (/(otp|on.?time|performance|cancellation|delay)/.test(t)) {
-    return "On-Time Performance is tracking at 87.2% today (target 85%+), with cancellations low so far. The watch item is the IGI fog window tomorrow morning, which the model expects to pull OTP toward the mid-80s between 06:00–10:00 IST. Pre-positioning reserve crew at IGI is the main lever to protect it.";
+  if (/(december|crisis|historical|cycle|pattern|january|history)/.test(t)) {
+    return "Historical context: December and January are the highest-risk months at IGI because of fog. In prior years that fog repeatedly triggered cascading FDTL crew-duty violations — the December 2025 event cancelled ~4,500 flights, drove ₹5B in refunds, and stranded 3,000+ bags.\n\nThe IOCC was built specifically to break that cycle: probabilistic crew forecasting, Monte Carlo stress-testing, 3-minute IROP recovery, and unified Sabre/Amadeus/Thales data. Counterfactual replay shows an 84% reduction in cancellations (see the Dec Crisis Replay tab). Tonight's IGI fog window is the same setup — already modelled and being mitigated.\n\nRecommended action: run tomorrow's fog scenario through Monte Carlo now and pre-stage reserve crew so the historical cascade can't form.";
   }
-  return "Demo mode — I answer from the IOCC's current snapshot: 2,247 flights today, OTP 87.2%, Disruption Risk 38/100, an active IROP on FL-204 (DEL→BOM), and an IGI fog advisory for tomorrow morning.\n\nTry one of the suggested questions for a detailed breakdown: IGI disruption risk, crew FDTL status, FL-204 recovery options, or December-crisis analysis.";
+  if (/(flight|status|airborne|delay|board|ops|snapshot|operation)/.test(t)) {
+    return "Flight operations snapshot — active issues:\n\n• FL-204 DEL→BOM — boarding hold — crew duty limit 48 min (recovery generated)\n• FL-734 CCU→DEL — +35 min — thunderstorm reroute under review\n• FL-891 BLR→DEL — +22 min — aircraft rotation break at BLR\n• FL-318 BOM→DEL — +18 min — A320 VT-IZB sensor fault\n• FL-552 BOM→MAA — +18 min — ATC flow control at BOM\n• FL-771 DEL→CCU — +5 min — 42-pax tight connection at DEL\n• FL-446 HYD→BLR — airborne — medical case, medics on stand 22\n\nOTP is 87.2% (target 85%+). The most time-critical item is FL-204 — it's the only one tied to a hard FDTL deadline.\n\nRecommended action: prioritise FL-204's crew swap, then re-time FL-734 around the CCU cell.";
+  }
+  return "I have the full network picture open — flight ops, crew FDTL status, hub weather, and the live risk board. Right now the headline is FL-204 (crew duty in 48 min), the IGI fog window 06:00–10:00 tomorrow, and HYD crosswinds; Disruption Risk Index is 38/100.\n\nAsk me about any of: IGI/weather risk, crew FDTL status, FL-204 recovery options, the top network risks, or the December crisis pattern.\n\nRecommended action: start with the FL-204 crew swap — it's the nearest hard deadline.";
 }
 
 // ── SCREEN: AI ASSISTANT ────────────────────────────────────────

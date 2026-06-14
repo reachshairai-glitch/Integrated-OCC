@@ -1510,6 +1510,7 @@ const SA_INTER = [
 // ── SCREEN: SYSTEM ARCHITECTURE ─────────────────────────────────
 function SystemArchitecture() {
   const [zoom, setZoom] = useState(1);
+  const [fit, setFit] = useState(true);
   const [engine, setEngine] = useState(null);
   const [tip, setTip] = useState(null);
   const [pos, setPos] = useState({ x: 0, y: 0 });
@@ -1539,6 +1540,16 @@ function SystemArchitecture() {
   const engBW = 150, engH = 86, engY = 350, engX = xs(5, engBW);
   const outBW = 150, outH = 56, outY = 560, outX = xs(5, outBW);
   const cx = (x, bw) => x + bw / 2;
+
+  // Fit the diagram to the container width (default + on resize while in fit mode).
+  const fitToWidth = () => { const r = wrapRef.current; if (r) setZoom(Math.max(0.4, Math.min(2, +((r.clientWidth - 4) / W).toFixed(3)))); };
+  useEffect(() => { fitToWidth(); /* fit on mount */ }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!fit) return;
+    const onResize = () => fitToWidth();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [fit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const move = (e) => { const r = wrapRef.current?.getBoundingClientRect(); if (r) setPos({ x: e.clientX - r.left, y: e.clientY - r.top }); };
   const edgeProps = (title, sub) => ({ className: "iocc-arch-edge", onMouseEnter: () => setTip({ title, sub }), onMouseLeave: () => setTip(null) });
@@ -1582,8 +1593,12 @@ function SystemArchitecture() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
         <span style={{ fontSize: 11, color: C.textMuted }}>Interactive SVG · zoom and explore</span>
         <div style={{ display: "flex", gap: 6 }}>
-          {[["−", () => setZoom(z => Math.max(0.6, +(z - 0.2).toFixed(2)))], ["Reset", () => setZoom(1)], ["+", () => setZoom(z => Math.min(2, +(z + 0.2).toFixed(2)))]].map(([t, fn], i) => (
-            <button key={i} onClick={fn} style={{ background: C.surfaceHigh, color: C.textDim, border: `1px solid ${C.border}`, borderRadius: 5, padding: "4px 12px", fontSize: 12, cursor: "pointer", fontFamily: "monospace" }}>{t}</button>
+          {[
+            ["−", () => { setFit(false); setZoom(z => Math.max(0.4, +(z - 0.2).toFixed(2))); }, false],
+            ["Fit", () => { setFit(true); fitToWidth(); }, fit],
+            ["+", () => { setFit(false); setZoom(z => Math.min(2, +(z + 0.2).toFixed(2))); }, false],
+          ].map(([t, fn, active], i) => (
+            <button key={i} onClick={fn} style={{ background: active ? C.blueDim : C.surfaceHigh, color: active ? C.text : C.textDim, border: `1px solid ${active ? C.blue : C.border}`, borderRadius: 5, padding: "4px 12px", fontSize: 12, cursor: "pointer", fontFamily: "monospace" }}>{t}</button>
           ))}
         </div>
       </div>

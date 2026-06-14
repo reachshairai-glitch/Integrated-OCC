@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useRef } from "react";
-import { LineChart, Line, AreaChart, Area, BarChart, Bar, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadialBarChart, RadialBar, PieChart, Pie, Cell } from "recharts";
+import { LineChart, Line, AreaChart, Area, BarChart, Bar, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadialBarChart, RadialBar, PieChart, Pie, Cell, ReferenceLine } from "recharts";
 
 // ── DESIGN TOKENS ──────────────────────────────────────────────
 const C = {
@@ -459,10 +459,32 @@ function Dashboard() {
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
             <XAxis dataKey="time" tickFormatter={toAmPm} tick={{ fill: C.textMuted, fontSize: 10 }} />
-            <YAxis tick={{ fill: C.textMuted, fontSize: 10 }} />
+            <YAxis
+              yAxisId="otp"
+              domain={[78, 98]}
+              ticks={[80, 85, 90, 95]}
+              tick={{ fill: C.textMuted, fontSize: 10 }}
+              label={{ value: "OTP %", angle: -90, position: "insideLeft", fill: C.textMuted, fontSize: 10, style: { textAnchor: "middle" } }}
+            />
+            <YAxis
+              yAxisId="cancel"
+              orientation="right"
+              domain={[0, 15]}
+              ticks={[0, 5, 10, 15]}
+              tick={{ fill: C.textMuted, fontSize: 10 }}
+              label={{ value: "Cancellations", angle: 90, position: "insideRight", fill: C.textMuted, fontSize: 10, style: { textAnchor: "middle" } }}
+            />
             <Tooltip contentStyle={{ background: C.surfaceHigh, border: `1px solid ${C.borderBright}`, color: C.text }} labelFormatter={toAmPm} />
-            <Area type="monotone" dataKey="otpPct" stroke={C.green} fill="url(#otpGrad)" strokeWidth={2} name="OTP %" />
-            <Bar dataKey="cancelled" fill={C.red} name="Cancelled" />
+            <Bar yAxisId="cancel" dataKey="cancelled" fill={C.red} fillOpacity={0.35} barSize={6} name="Cancelled" />
+            <ReferenceLine
+              yAxisId="otp"
+              y={85}
+              stroke={C.amber}
+              strokeDasharray="5 4"
+              strokeOpacity={0.7}
+              label={{ value: "OTP Target", position: "insideTopRight", fill: C.amber, fontSize: 9 }}
+            />
+            <Area yAxisId="otp" type="monotone" dataKey="otpPct" stroke={C.green} fill="url(#otpGrad)" strokeWidth={2.5} name="OTP %" />
           </ComposedChart>
         </ResponsiveContainer>
       </div>

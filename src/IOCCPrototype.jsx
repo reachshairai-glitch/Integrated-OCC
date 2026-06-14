@@ -885,7 +885,7 @@ function CrewMap({ height = 300, movements = [] }) {
 
 // ── SCREEN: CREW RECOVERY ───────────────────────────────────────
 function CrewRecovery() {
-  const [selected, setSelected] = useState(2);
+  const [selected, setSelected] = useState(0);
   const [executing, setExecuting] = useState(false);
   const [approved, setApproved] = useState(false);
   const approve = () => { setExecuting(true); setTimeout(() => { setExecuting(false); setApproved(true); }, 1800); };
@@ -1115,7 +1115,7 @@ function CrewRecovery() {
               ))}
             </div>
             <div style={{ marginTop: 18, fontSize: 13, color: C.textMuted }}>Recovery plan approved by controller in <strong style={{ color: C.green }}>1 min 52 sec</strong> · all assignments FDTL Phase II compliant</div>
-            <button onClick={() => { setApproved(false); setExecuting(false); setSelected(2); }}
+            <button onClick={() => { setApproved(false); setExecuting(false); setSelected(0); }}
               style={{ marginTop: 18, background: "transparent", color: C.textMuted, border: `1px solid ${C.border}`, borderRadius: 6, padding: "8px 20px", fontSize: 12, cursor: "pointer" }}>
               Reset Demo
             </button>

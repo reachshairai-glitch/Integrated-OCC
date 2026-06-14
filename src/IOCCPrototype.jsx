@@ -116,14 +116,16 @@ const routes = [
 
 // ── COMPONENTS ──────────────────────────────────────────────────
 
-function Metric({ label, value, unit, status, delta, pulse, live }) {
+function Metric({ label, value, unit, status, delta, glow, live }) {
   const statusColor = status === "good" ? C.green : status === "warn" ? C.amber : status === "bad" ? C.red : C.cyan;
+  const glowColor = glow === "red" ? C.red : glow === "amber" ? C.amber : null;
+  const glowClass = glow === "red" ? "iocc-glow-red" : glow === "amber" ? "iocc-glow-amber" : undefined;
   return (
-    <div className={pulse ? "iocc-pulse" : undefined}
-      style={{ background: C.surface, border: `1px solid ${pulse ? C.amber : C.border}`, borderRadius: 8, padding: "16px 20px", flex: 1, minWidth: 140, transition: "border-color 0.4s" }}>
+    <div className={glowClass}
+      style={{ background: C.surface, border: `1px solid ${glowColor || C.border}`, borderRadius: 8, padding: "16px 20px", flex: 1, minWidth: 140, transition: "border-color 0.4s" }}>
       <div style={{ fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
-        {label}
-        {live && <span className="iocc-live-dot" style={{ width: 6, height: 6, borderRadius: "50%", background: C.cyan, display: "inline-block", boxShadow: `0 0 5px ${C.cyan}` }} />}
+        <span style={{ flex: 1 }}>{label}</span>
+        {live && <span className="iocc-live-dot" style={{ width: 6, height: 6, borderRadius: "50%", background: C.green, display: "inline-block", boxShadow: `0 0 5px ${C.green}`, flexShrink: 0 }} />}
       </div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
         <span style={{ fontSize: 28, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", color: statusColor, transition: "color 0.3s" }}>{value}</span>
@@ -134,11 +136,11 @@ function Metric({ label, value, unit, status, delta, pulse, live }) {
   );
 }
 
-function AlertBadge({ level, text }) {
+function AlertBadge({ level, text, className }) {
   const colors = { critical: [C.red, C.redDim], warn: [C.amber, C.amberDim], ok: [C.green, C.greenDim] };
   const [fg, bg] = colors[level] || colors.ok;
   return (
-    <span style={{ background: bg, color: fg, border: `1px solid ${fg}`, borderRadius: 4, padding: "2px 8px", fontSize: 11, fontWeight: 600, letterSpacing: 0.5 }}>
+    <span className={className} style={{ background: bg, color: fg, border: `1px solid ${fg}`, borderRadius: 4, padding: "2px 8px", fontSize: 11, fontWeight: 600, letterSpacing: 0.5 }}>
       {text}
     </span>
   );
@@ -332,6 +334,27 @@ function airborneNow(d = new Date()) {
   return Math.max(0, Math.round(airborneBaseline(d) + (Math.random() * 10 - 5)));
 }
 
+// Shared keyframes: IROP badge pulse, blinking live dots, alert slide-in, risk glow.
+const IOCC_ANIM_CSS = `
+  @keyframes ioccPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(245,158,11,0); } 50% { box-shadow: 0 0 14px 2px rgba(245,158,11,0.5); } }
+  .iocc-pulse { animation: ioccPulse 2s ease-in-out infinite; }
+  @keyframes ioccBlink { 0%,100% { opacity: 1; } 50% { opacity: 0.12; } }
+  .iocc-live-dot { animation: ioccBlink 3s ease-in-out infinite; }
+  @keyframes ioccAlertIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+  .iocc-alert-in { animation: ioccAlertIn 0.5s ease-out; }
+  @keyframes ioccGlowAmber { 0%,100% { box-shadow: 0 0 0 0 rgba(245,158,11,0); } 50% { box-shadow: 0 0 16px 1px rgba(245,158,11,0.55); } }
+  .iocc-glow-amber { animation: ioccGlowAmber 2s ease-in-out infinite; }
+  @keyframes ioccGlowRed { 0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); } 50% { box-shadow: 0 0 16px 1px rgba(239,68,68,0.6); } }
+  .iocc-glow-red { animation: ioccGlowRed 2s ease-in-out infinite; }
+`;
+function injectAnim() {
+  if (document.getElementById("iocc-anim")) return;
+  const s = document.createElement("style");
+  s.id = "iocc-anim";
+  s.textContent = IOCC_ANIM_CSS;
+  document.head.appendChild(s);
+}
+
 // ── SCREEN: DASHBOARD ───────────────────────────────────────────
 function Dashboard() {
   // Inject animation keyframes once (pulse glow, blinking live dot, alert slide-in).
@@ -339,54 +362,34 @@ function Dashboard() {
     if (document.getElementById("iocc-anim")) return;
     const s = document.createElement("style");
     s.id = "iocc-anim";
-    s.textContent = `
-      @keyframes ioccPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(245,158,11,0); } 50% { box-shadow: 0 0 16px 2px rgba(245,158,11,0.55); } }
-      .iocc-pulse { animation: ioccPulse 1.8s ease-in-out infinite; }
-      @keyframes ioccBlink { 0%,100% { opacity: 1; } 50% { opacity: 0.15; } }
-      .iocc-live-dot { animation: ioccBlink 1.4s ease-in-out infinite; }
-      @keyframes ioccAlertIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
-      .iocc-alert-in { animation: ioccAlertIn 0.5s ease-out; }
-    `;
+    s.textContent = IOCC_ANIM_CSS;
     document.head.appendChild(s);
   }, []);
 
-  // Live KPI state — each tile random-walks within a realistic band, every 4s.
-  const [kpi, setKpi] = useState(() => ({ otp: 87.2, airborne: airborneNow(), flightsToday: 2247, cancellations: 4, crew: 91.4, risk: 38, pax: 1840 }));
-  useEffect(() => {
-    const wander = (v, step, min, max) => Math.max(min, Math.min(max, v + (Math.random() - 0.5) * step));
-    const t = setInterval(() => {
-      setKpi(k => ({
-        ...k,
-        otp: +wander(k.otp, 0.7, 83.5, 90).toFixed(1),
-        crew: +wander(k.crew, 0.5, 88, 94).toFixed(1),
-        risk: Math.round(wander(k.risk, 4, 28, 62)),
-        pax: Math.round(wander(k.pax, 45, 1480, 2200)),
-        cancellations: Math.max(0, Math.min(9, k.cancellations + (Math.random() < 0.35 ? (Math.random() < 0.5 ? -1 : 1) : 0))),
-        flightsToday: k.flightsToday + (Math.random() < 0.6 ? 1 : 0),
-      }));
-    }, 4000);
-    return () => clearInterval(t);
-  }, []);
-
-  // Flights airborne follows the day's IST traffic curve (+/- small jitter), refreshed every 2s.
-  useEffect(() => {
-    const t = setInterval(() => {
-      setKpi(k => ({ ...k, airborne: airborneNow() }));
-    }, 2000);
-    return () => clearInterval(t);
-  }, []);
+  // Live KPI values — each tile rides its own sine wave (different frequencies)
+  // so they fluctuate independently; tick advances every 4s.
+  const [tick, setTick] = useState(0);
+  useEffect(() => { const t = setInterval(() => setTick(x => x + 1), 4000); return () => clearInterval(t); }, []);
+  const kpi = {
+    otp: +(87 + Math.sin(tick * 0.30) * 2).toFixed(1),         // 85–89%
+    cancellations: Math.round(6 + Math.sin(tick * 0.23) * 2),  // 4–8
+    crew: +(91.5 + Math.sin(tick * 0.17) * 1.5).toFixed(1),    // 90–93%
+    risk: Math.round(38 + Math.sin(tick * 0.40) * 4),          // 34–42
+    pax: Math.round(1850 + Math.sin(tick * 0.28) * 150),       // 1,700–2,000
+    flightsToday: 2247,                                         // daily total — fixed
+    airborne: airborneNow(),                                    // IST time-of-day curve ±5
+  };
 
   // Rolling OTP series — append a fresh point every 30s, drop the oldest.
   const [otpSeries, setOtpSeries] = useState(flightData);
   useEffect(() => {
     const t = setInterval(() => {
       const time = new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: false });
-      setOtpSeries(prev => [...prev.slice(1), {
-        time,
-        flights: 240 + Math.round(Math.random() * 70),
-        cancelled: Math.round(Math.random() * 6),
-        otpPct: Math.round(84 + Math.random() * 6),
-      }]);
+      setOtpSeries(prev => {
+        const last = prev[prev.length - 1];
+        const otpPct = Math.max(82, Math.min(95, +(((last && last.otpPct) || 87) + (Math.random() * 3 - 1.5)).toFixed(1)));
+        return [...prev.slice(1), { time, flights: 240 + Math.round(Math.random() * 70), cancelled: Math.round(Math.random() * 6), otpPct }];
+      });
     }, 30000);
     return () => clearInterval(t);
   }, []);
@@ -415,13 +418,13 @@ function Dashboard() {
 
       {/* KPI Row */}
       <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-        <Metric label="On-Time Performance" value={kpi.otp.toFixed(1)} unit="%" status={kpi.otp >= 85 ? "good" : "warn"} delta="+1.2%" />
+        <Metric label="On-Time Performance" value={kpi.otp.toFixed(1)} unit="%" status={kpi.otp >= 85 ? "good" : "warn"} delta="+1.2%" live />
         <Metric label="Flights Airborne Now" value={kpi.airborne} status="good" live />
-        <Metric label="Flights Today" value={kpi.flightsToday.toLocaleString("en-IN")} status="good" />
-        <Metric label="Cancellations" value={kpi.cancellations} status={kpi.cancellations > 5 ? "warn" : "good"} delta="+2" />
-        <Metric label="Crew Availability" value={kpi.crew.toFixed(1)} unit="%" status="warn" delta="-2.3%" />
-        <Metric label="Disruption Risk Index" value={kpi.risk} unit="/100" status={kpi.risk > 50 ? "bad" : "warn"} pulse={kpi.risk > 35} />
-        <Metric label="Pax Impacted" value={kpi.pax.toLocaleString("en-IN")} status="warn" delta="+320" />
+        <Metric label="Flights Today" value={kpi.flightsToday.toLocaleString("en-IN")} status="good" live />
+        <Metric label="Cancellations" value={kpi.cancellations} status={kpi.cancellations > 5 ? "warn" : "good"} delta="+2" live />
+        <Metric label="Crew Availability" value={kpi.crew.toFixed(1)} unit="%" status="warn" delta="-2.3%" live />
+        <Metric label="Disruption Risk Index" value={kpi.risk} unit="/100" status={kpi.risk > 50 ? "bad" : "warn"} glow={kpi.risk > 50 ? "red" : kpi.risk > 40 ? "amber" : null} live />
+        <Metric label="Pax Impacted" value={kpi.pax.toLocaleString("en-IN")} status="warn" delta="+320" live />
       </div>
 
       {/* OTP Trend */}
@@ -2105,6 +2108,7 @@ export default function IOCCPrototype() {
   const [tab, setTab] = useState(0);
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
+  useEffect(() => { injectAnim(); }, []);
   const tabs = [
     { label: "🖥️  OCC Dashboard", component: <Dashboard /> },
     { label: "🔮  Disruption Prediction", component: <DisruptionPrediction /> },
@@ -2132,7 +2136,7 @@ export default function IOCCPrototype() {
             <div style={{ fontFamily: "monospace", fontSize: 13, color: C.text, letterSpacing: 1 }}>
               {now.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })} <span style={{ fontSize: 10, color: C.textMuted }}>IST</span>
             </div>
-            <AlertBadge level="warn" text="⚡ ACTIVE IROP — FL-204 · DEL→BOM" />
+            <AlertBadge level="warn" text="⚡ ACTIVE IROP — FL-204 · DEL→BOM" className="iocc-pulse" />
             <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.green, boxShadow: `0 0 6px ${C.green}` }} />
           </div>
         </div>

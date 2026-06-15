@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useRef } from "react";
-import { LineChart, Line, AreaChart, Area, BarChart, Bar, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadialBarChart, RadialBar, PieChart, Pie, Cell, ReferenceLine } from "recharts";
+import { LineChart, Line, AreaChart, Area, BarChart, Bar, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadialBarChart, RadialBar, PieChart, Pie, Cell, ReferenceLine, ReferenceArea, ReferenceDot } from "recharts";
 
 // ── DESIGN TOKENS ──────────────────────────────────────────────
 const C = {
@@ -525,6 +525,20 @@ function Dashboard() {
 
 // ── SCREEN: DISRUPTION PREDICTION ──────────────────────────────
 function DisruptionPrediction() {
+  // Peak Disruption Risk point (Fix 6)
+  const peakRisk = riskForecast.reduce((a, b) => (b.risk > a.risk ? b : a), riskForecast[0]);
+
+  // IST clock captured at component load → real times under each relative label (Fix 5)
+  const forecastBase = useRef(new Date());
+  const HOUR_OFFSETS = { Now: 0, "+6h": 6, "+12h": 12, "+24h": 24, "+36h": 36, "+48h": 48, "+72h": 72 };
+  const istFor = (label) => istHHMM(new Date(forecastBase.current.getTime() + (HOUR_OFFSETS[label] || 0) * 3600000));
+  const ForecastTick = ({ x, y, payload }) => (
+    <g transform={`translate(${x},${y})`}>
+      <text x={0} y={0} dy={12} textAnchor="middle" fill={C.textMuted} fontSize={10}>{payload.value}</text>
+      <text x={0} y={0} dy={25} textAnchor="middle" fill={C.textDim} fontSize={9}>{istFor(payload.value)} IST</text>
+    </g>
+  );
+
   return (
     <div>
       <SectionHeader
@@ -558,25 +572,67 @@ function DisruptionPrediction() {
       <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: 16, marginBottom: 16 }}>
         <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20 }}>
           <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 16 }}>72-Hour Risk Forecast — Composite Model</div>
-          <ResponsiveContainer width="100%" height={220}>
-            <ComposedChart data={riskForecast}>
+          <ResponsiveContainer width="100%" height={240}>
+            <ComposedChart data={riskForecast} margin={{ top: 24, right: 8, left: 0, bottom: 4 }}>
               <defs>
                 <linearGradient id="riskGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={C.amber} stopOpacity={0.4} />
+                  <stop offset="5%" stopColor={C.amber} stopOpacity={0.15} />
                   <stop offset="95%" stopColor={C.amber} stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="weatherGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={C.blue} stopOpacity={0.3} />
+                  <stop offset="5%" stopColor={C.blue} stopOpacity={0.15} />
                   <stop offset="95%" stopColor={C.blue} stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
-              <XAxis dataKey="hour" tick={{ fill: C.textMuted, fontSize: 10 }} />
-              <YAxis tick={{ fill: C.textMuted, fontSize: 10 }} domain={[0, 100]} />
+              <XAxis dataKey="hour" tick={<ForecastTick />} height={40} interval={0} />
+              <YAxis
+                yAxisId="left"
+                domain={[0, 85]}
+                tick={{ fill: C.textMuted, fontSize: 10 }}
+                label={{ value: "Risk Score", angle: -90, position: "insideLeft", fill: C.textMuted, fontSize: 10, style: { textAnchor: "middle" } }}
+              />
+              <YAxis
+                yAxisId="right"
+                orientation="right"
+                domain={[70, 100]}
+                tick={{ fill: C.textMuted, fontSize: 10 }}
+                label={{ value: "Crew Avail %", angle: 90, position: "insideRight", fill: C.textMuted, fontSize: 10, style: { textAnchor: "middle" } }}
+              />
               <Tooltip contentStyle={{ background: C.surfaceHigh, border: `1px solid ${C.borderBright}`, color: C.text }} />
-              <Area type="monotone" dataKey="risk" stroke={C.amber} fill="url(#riskGrad)" strokeWidth={2} name="Disruption Risk" />
-              <Area type="monotone" dataKey="weather" stroke={C.blue} fill="url(#weatherGrad)" strokeWidth={1.5} name="Weather Impact" />
-              <Line type="monotone" dataKey="crew" stroke={C.green} strokeWidth={2} dot={false} name="Crew Availability %" strokeDasharray="5 3" />
+              {/* High Risk Window band (Fix 4) — behind data */}
+              <ReferenceArea
+                yAxisId="left"
+                x1="+24h"
+                x2="+48h"
+                fill={C.red}
+                fillOpacity={0.05}
+                label={{ value: "HIGH RISK WINDOW", position: "insideTopLeft", fill: C.red, fontSize: 9, style: { letterSpacing: 1 } }}
+              />
+              {/* Critical Threshold line (Fix 3) — behind data */}
+              <ReferenceLine
+                yAxisId="left"
+                y={60}
+                stroke={C.red}
+                strokeDasharray="5 4"
+                strokeOpacity={0.7}
+                label={{ value: "Critical Threshold", position: "insideBottomRight", fill: C.red, fontSize: 10 }}
+              />
+              <Area yAxisId="left" type="monotone" dataKey="risk" stroke={C.amber} fill="url(#riskGrad)" strokeWidth={2.5} name="Disruption Risk" isAnimationActive={false} />
+              <Area yAxisId="left" type="monotone" dataKey="weather" stroke={C.blue} fill="url(#weatherGrad)" strokeWidth={2.5} name="Weather Impact" isAnimationActive={false} />
+              <Line yAxisId="right" type="monotone" dataKey="crew" stroke={C.green} strokeWidth={2.5} dot={false} name="Crew Availability %" strokeDasharray="5 3" isAnimationActive={false} />
+              {/* Peak Risk highlight (Fix 6) */}
+              <ReferenceDot yAxisId="left" x={peakRisk.hour} y={peakRisk.risk} r={9} fill={C.amber} fillOpacity={0.2} stroke="none" />
+              <ReferenceDot
+                yAxisId="left"
+                x={peakRisk.hour}
+                y={peakRisk.risk}
+                r={5}
+                fill={C.amber}
+                stroke={C.bg}
+                strokeWidth={1.5}
+                label={{ value: `Peak Risk ${peakRisk.risk} at ${peakRisk.hour}`, position: "right", fill: C.amber, fontSize: 10, offset: 8 }}
+              />
             </ComposedChart>
           </ResponsiveContainer>
           <div style={{ display: "flex", gap: 16, marginTop: 8 }}>

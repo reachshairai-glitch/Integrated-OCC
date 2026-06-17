@@ -1447,6 +1447,13 @@ Three recurring high-fatigue patterns from operational data:
   • Dec/Jan fog disruption: extended IGI ground delays push crew past planned hours — fatigue scores above 65 for up to 23% of active crew during fog events.
   • Back-of-clock international: red-eye 01:00–04:00 IST rotations show the network's highest scores, averaging ~71.
 Undisclosed dimension of the December 2025 crisis: ~18% of the crew shortfall was crew legally UNFIT due to fatigue accumulation during the extended disruption, compounding the FDTL regulatory mismatch.
+
+6e) HOW THE FATIGUE SCORE IS CALCULATED (methodology)
+The Three Process Model fuses three independent inputs into the 0–100 score (same family as the industry-standard SAFTE-FAST and FAID engines):
+  • Process S — homeostatic sleep pressure: builds with hours awake, discharges with sleep; driven by sleep history + accumulated sleep debt.
+  • Process C — circadian rhythm: body-clock alertness wave, lowest in the Window of Circadian Low (~02:00–06:00 IST); early-morning and red-eye duties land in this trough.
+  • Process W — sleep inertia + time on task: post-wake grogginess plus degradation across hours on duty.
+The three are summed and normalized to 0–100. Worked example — FO Patel 67: short rest (high S) + early duty in the circadian dip (high C) + time on task (W) → 67, red band. When explaining a score, identify which process dominates; a circadian-driven red can often be cleared by shifting the duty out of the 02:00–06:00 trough rather than by rest alone.
 ══════════════════════════════════════════════════════════════
 
 HOW TO ANSWER:
@@ -1465,6 +1472,11 @@ Always reference DGCA FDTL Phase II and ICAO Doc 9966 when discussing compliance
 // ── SCRIPTED ASSISTANT (offline demo — mirrors SYSTEM_PROMPT; no API key) ──
 function scriptedReply(q) {
   const t = q.toLowerCase();
+
+  // How the bio-mathematical fatigue score is calculated (methodology)
+  if (/(calculat|deriv|comput|methodolog|three[- ]?process|how .*(work|model))/.test(t) && /(fatigue|score|bio|alert|model|three[- ]?process|rest)/.test(t)) {
+    return "How the Fatigue Risk Score is calculated:\n\nThe IOCC uses a bio-mathematical model based on the Three Process Model of alertness (the same family as the industry-standard SAFTE-FAST and FAID engines). It fuses three independent inputs into one 0–100 score:\n\n• Process S — Homeostatic sleep pressure: builds with every hour awake and discharges only with sleep. Driven by sleep history and accumulated sleep debt over the prior days.\n• Process C — Circadian rhythm: the body-clock alertness wave, lowest in the Window of Circadian Low (~02:00–06:00 IST). Early-morning and red-eye duties land directly in this trough.\n• Process W — Sleep inertia + time on task: grogginess just after waking, plus the steady degradation across hours already on duty.\n\nThe three are summed and normalized onto the 0–100 scale: 0–30 LOW (green) · 30–60 MODERATE (amber) · 60+ HIGH (red).\n\nWorked example — FO A. Patel, 67/100 (red): short prior rest (8.5h → high Process S / sleep debt) + an early duty hitting the circadian dip (high Process C) + accumulated time on task (Process W) → normalizes to 67, in the high-risk band. This is the Phase 2 capability under our ICAO Doc 9966 roadmap, aligned to DGCA FDTL Phase II.\n\nRecommended action: when reviewing any red score, check which process is dominant — if it's Process C (circadian), a few hours' schedule shift out of the 02:00–06:00 trough often clears it faster than added rest alone.";
+  }
 
   // ICAO Doc 9966 / FRMS compliance status
   if (/(icao|doc ?9966|9966|frms)/.test(t)) {
@@ -1518,6 +1530,7 @@ function AIAssistant() {
     "Summarise recovery options for FL-204",
     "What are the current crew fatigue scores across the network?",
     "Is FO Patel fit for duty on the next assignment?",
+    "How is the crew fatigue score calculated?",
     "What is the FRMS compliance status for ICAO Doc 9966?",
   ];
 

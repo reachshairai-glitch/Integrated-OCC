@@ -1561,18 +1561,6 @@ function AIAssistant() {
         badge={<AlertBadge level="ok" text="● ARIA ONLINE" />}
       />
 
-      {/* Suggestions */}
-      {messages.length <= 1 && (
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-          {suggestions.map((s, i) => (
-            <button key={i} onClick={() => sendMessage(s)}
-              style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: "8px 12px", fontSize: 11, color: C.textDim, cursor: "pointer", textAlign: "left" }}>
-              {s}
-            </button>
-          ))}
-        </div>
-      )}
-
       {/* Messages */}
       <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
         {messages.map((msg, i) => (
@@ -1599,6 +1587,21 @@ function AIAssistant() {
         )}
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Suggestions — always visible so they reappear after every response */}
+      {!loading && (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 10, color: C.textMuted, marginBottom: 6, fontFamily: "monospace", letterSpacing: 0.5 }}>SUGGESTED QUESTIONS</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {suggestions.map((s, i) => (
+              <button key={i} onClick={() => sendMessage(s)}
+                style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: "8px 12px", fontSize: 11, color: C.textDim, cursor: "pointer", textAlign: "left" }}>
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Input */}
       <div style={{ display: "flex", gap: 8 }}>

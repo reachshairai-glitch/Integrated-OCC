@@ -1414,6 +1414,39 @@ MAA     : Vis 6000m, wind 110/10kt, clear. 6h: stable, no advisories.
 
 5) HISTORICAL PATTERN CONTEXT
 December and January are historically the highest-risk months at IGI due to fog. In prior years this triggered cascading FDTL crew-duty violations — the December 2025 event cancelled ~4,500 flights, drove ₹5B in refunds, and stranded 3,000+ bags. The IOCC was purpose-built to break this cycle via probabilistic crew forecasting, Monte Carlo stress-testing, 3-minute IROP recovery, and unified Sabre/Amadeus/Thales data. Counterfactual replay shows an 84% reduction in cancellations.
+6) FATIGUE RISK MANAGEMENT SYSTEM (FRMS)  — Component E of the IOCC
+
+6a) BIO-MATHEMATICAL FATIGUE SCORING
+The IOCC runs a bio-mathematical fatigue model based on the Three Process Model of alertness, combining sleep history, circadian rhythm phase, and time on task to generate a Fatigue Risk Score (0–100) for every active crew member.
+  • 0–30  = LOW risk    (green)  — cleared for duty
+  • 30–60 = MODERATE    (amber)  — monitor
+  • 60+   = HIGH risk   (red)    — intervention required BEFORE any flight assignment
+Current scores:
+  • Capt R. Sharma (DEL) — 34 — MODERATE (amber) — early-morning start after a short rest window
+  • FO A. Patel  (DEL) — 67 — HIGH (red) — flagged for mandatory rest before next assignment
+  • Capt H. Singh (BLR) — 28 — LOW (green) — cleared for duty
+  • Capt M. Joshi (BOM) — 41 — MODERATE (amber) — monitoring
+  • FO S. Reddy  (HYD) — 22 — LOW (green) — cleared
+FO Patel's 67 is already factored into the live IROP recovery: Option 1 (crew swap) specifically AVOIDS assigning FO Patel to FL-204 because of this score — Capt Mehta covers instead.
+
+6b) CREW REST COMPLIANCE TRACKING
+The IOCC tracks minimum rest under DGCA FDTL Phase II (effective December 2024) in real time. Minimum rest between duties: 12h domestic, 18h international.
+Current: 94% of active crew fully compliant · 4 crew in monitored AMBER zone (rest 10–12h) · 1 crew in RED zone — FO A. Patel, only 8.5h rest completed before next scheduled duty (3.5h deficit vs 12h domestic minimum).
+The IOCC automatically blocks assignment of non-compliant crew and flags the crew controller with the exact rest deficit and the earliest legal return-to-duty time.
+
+6c) ICAO Doc 9966 COMPLIANCE STATUS
+The airline is in Phase 2 of its FRMS roadmap, targeting full ICAO Doc 9966 compliance by March 2027.
+  • Phase 1 (completed Oct 2025): fatigue reporting culture + initial bio-mathematical modelling.
+  • Phase 2 (current): integration of fatigue scores into operational rostering + real-time crew monitoring — exactly what ARIA demonstrates today.
+  • Phase 3 (Jan–Mar 2027): predictive fatigue modelling at schedule-publication stage — identifying roster fatigue risk 30–60 days before operations.
+The fatigue module is designed to meet all SEVEN ICAO Doc 9966 FRMS components: (1) fatigue risk management policy, (2) fatigue reporting system, (3) fatigue risk identification & mitigation, (4) fatigue incident investigation, (5) FRMS promotion & training, (6) FRMS quality assurance, (7) FRMS documentation.
+
+6d) FATIGUE RISK PATTERNS (historical intelligence)
+Three recurring high-fatigue patterns from operational data:
+  • Early-morning turn: crew on 04:00–06:00 IST departures after a late previous evening duty average a fatigue score of ~58 (moderate–high).
+  • Dec/Jan fog disruption: extended IGI ground delays push crew past planned hours — fatigue scores above 65 for up to 23% of active crew during fog events.
+  • Back-of-clock international: red-eye 01:00–04:00 IST rotations show the network's highest scores, averaging ~71.
+Undisclosed dimension of the December 2025 crisis: ~18% of the crew shortfall was crew legally UNFIT due to fatigue accumulation during the extended disruption, compounding the FDTL regulatory mismatch.
 ══════════════════════════════════════════════════════════════
 
 HOW TO ANSWER:
@@ -1421,11 +1454,33 @@ HOW TO ANSWER:
 - Cite flight numbers (FL-xxx) and crew names when relevant.
 - Quantify risk in numbers (minutes, probabilities, pax counts, ₹).
 - End EVERY response with a line beginning "Recommended action:" giving one clear, concrete next step.
-- Be concise and analytical. You have every screen open — sound like it.`;
+- Be concise and analytical. You have every screen open — sound like it.
+
+FATIGUE / REST / FRMS QUESTIONS — always structure the answer in THREE parts:
+  1. Current fatigue status — specific scores AND crew names.
+  2. What the bio-mathematical model predicts for the next 6–12h — are scores rising or falling as crew complete rest periods.
+  3. A specific operational recommendation (e.g. pre-position a rested reserve crew at IGI before the 04:00–06:00 window).
+Always reference DGCA FDTL Phase II and ICAO Doc 9966 when discussing compliance, to signal regulatory awareness. NEVER give a generic fatigue answer — every response must include specific scores, specific crew names, specific flight numbers, and a specific recommended action.`;
 
 // ── SCRIPTED ASSISTANT (offline demo — mirrors SYSTEM_PROMPT; no API key) ──
 function scriptedReply(q) {
   const t = q.toLowerCase();
+
+  // ICAO Doc 9966 / FRMS compliance status
+  if (/(icao|doc ?9966|9966|frms)/.test(t)) {
+    return "FRMS compliance status — ICAO Doc 9966:\n\nWe are in PHASE 2 of the FRMS roadmap, targeting full ICAO Doc 9966 compliance by March 2027.\n• Phase 1 (completed Oct 2025) — fatigue reporting culture + initial bio-mathematical modelling.\n• Phase 2 (current) — fatigue scores integrated into operational rostering + real-time crew monitoring. This is exactly what you're seeing ARIA do now.\n• Phase 3 (Jan–Mar 2027) — predictive fatigue modelling at schedule-publication stage, flagging roster fatigue risk 30–60 days before operations.\n\nThe fatigue module is built to satisfy all SEVEN ICAO Doc 9966 FRMS components: (1) FRM policy, (2) fatigue reporting system, (3) risk identification & mitigation, (4) incident investigation, (5) promotion & training, (6) quality assurance, (7) documentation.\n\nLive compliance picture under DGCA FDTL Phase II: 94% of active crew fully compliant, 4 in the amber rest zone (10–12h), 1 in red (FO A. Patel, 8.5h rest — assignment auto-blocked). Bio-mathematical scoring is live for every active crew member.\n\nRecommended action: keep Phase 2 evidence current — export tonight's fatigue-score and rest-compliance logs for the ICAO Doc 9966 quality-assurance file ahead of the March 2027 audit.";
+  }
+
+  // FO Patel fit-for-duty (fatigue-flagged crew)
+  if (/patel/.test(t)) {
+    return "FO A. Patel (DEL) — fit-for-duty assessment:\n\n1) CURRENT STATUS — Fatigue Risk Score 67/100, HIGH (red). Rest completed: 8.5h vs the 12h domestic minimum under DGCA FDTL Phase II — a 3.5h deficit. Verdict: NOT fit for duty on the next assignment. Assignment is auto-blocked by the IOCC.\n2) NEXT 6–12h — the bio-mathematical model (Three Process Model) projects his score dropping back below 60 only after he completes the full 12h rest period; earliest legal return-to-duty is once that rest is met. Until then he stays red.\n3) ALREADY MITIGATED — this is baked into the live FL-204 (DEL→BOM, 186 pax) recovery: Option 1 (crew swap) deliberately AVOIDS rostering FO Patel and uses Capt D. Mehta (10h 40m clear) instead.\n\nRecommended action: hold FO Patel out of all assignments until his 12h rest is complete; confirm Capt Mehta on the FL-204 swap — ARIA has already excluded Patel from that roster.";
+  }
+
+  // Network fatigue scores / rest / FRMS (3-part structure)
+  if (/(fatigue|rested|rest period|rest compliance|bio-?math|alertness|circadian|fit for duty|fitness)/.test(t)) {
+    return "Crew fatigue status across the network (bio-mathematical model · Three Process Model · 0–100):\n\n1) CURRENT SCORES —\n• FO A. Patel (DEL) — 67 — HIGH (red) — 8.5h rest, mandatory rest before next duty\n• Capt M. Joshi (BOM) — 41 — MODERATE (amber) — monitoring\n• Capt R. Sharma (DEL) — 34 — MODERATE (amber) — early-morning start, short rest window\n• Capt H. Singh (BLR) — 28 — LOW (green) — cleared\n• FO S. Reddy (HYD) — 22 — LOW (green) — cleared\nRest compliance (DGCA FDTL Phase II): 94% fully compliant · 4 amber (10–12h) · 1 red (Patel, 8.5h — auto-blocked).\n\n2) NEXT 6–12h — scores trend DOWN overall as crew complete rest: Patel clears red only after a full 12h rest. The watch item is the 04:00–06:00 IST early-morning bank — Sharma (34) and Joshi (41) are rostered into it and historically that pattern pushes scores toward ~58.\n\n3) RECOMMENDATION — pre-position one rested reserve crew at IGI before the 04:00–06:00 window tomorrow, since two crew already sit above the 50 mark heading into early duties during the forecast fog. Reference: DGCA FDTL Phase II + ICAO Doc 9966 (we are Phase 2 compliant).\n\nRecommended action: lock a rested IGI reserve for the 04:00–06:00 bank now and keep FO Patel out until his rest deficit clears.";
+  }
+
   if (/(fdtl|crew|duty|limit|roster|fatigue)/.test(t)) {
     return "Crew FDTL Phase II status — 4 of 8 monitored crew are inside their final 3 hours of duty:\n\n• FO A. Patel (DEL) — FL-891 — 1h 48m remaining — CRITICAL\n• Capt R. Sharma (DEL) — FL-204 — 2h 14m — AT RISK\n• FO P. Khan (DEL) — FL-771 — 2h 55m — AT RISK\n• Capt H. Singh (BLR) — reserve — 3h 02m — AT RISK\n• Capt M. Joshi (BOM) 4h 31m · FO S. Reddy (HYD) 5h 18m · Capt N. Iyer (MAA) 8h 50m — CLEAR\n\nThe binding constraint is FO Patel: at 1h 48m he cannot absorb any further BLR rotation slip, and FL-204 needs Capt Sharma swapped before his 2h 14m expires. Reserve crew BLR-23 and Capt D. Mehta (BOM, 10h 40m clear) are available.\n\nRecommended action: assign Capt Mehta to cover the FL-204 swap and hold FO Patel out of any extension — confirm within 30 minutes.";
   }
@@ -1461,6 +1516,9 @@ function AIAssistant() {
     "Which crew are closest to FDTL limits in the next 6 hours?",
     "What would cause a December-style crisis cascade today?",
     "Summarise recovery options for FL-204",
+    "What are the current crew fatigue scores across the network?",
+    "Is FO Patel fit for duty on the next assignment?",
+    "What is the FRMS compliance status for ICAO Doc 9966?",
   ];
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
